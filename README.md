@@ -48,7 +48,7 @@
 - A UNIX-like OS (Linux, macOS)
 
 ### Build and Run
-    
+
 ```bash
 git clone https://github.com/yourusername/b-top.git
 cd b-top
@@ -68,8 +68,7 @@ cargo run --release
 
 ## 📜 License
 
-I do not actually care.
-
+MIT License
 ---
 
 ## Acknowledgements

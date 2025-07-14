@@ -61,7 +61,7 @@ cargo run --release
 
 - [ ] Add disk I/O monitoring
 - [ ] Support for more network interfaces
-- [ ] Configurable refresh rate
+- [x] Configurable refresh rate
 - [ ] Add resource management featres
 
 ---
@@ -69,11 +69,12 @@ cargo run --release
 ## 📜 License
 
 MIT License
+
 ---
 
 ## Acknowledgements
 
-Thanks to `ratatui` and `TachyonFX` for maintaining their projects for for the UI animations.
+Thanks to `ratatui` and `TachyonFX` repositories for maintaining their projects for for the UI animations.
 
 ---
 

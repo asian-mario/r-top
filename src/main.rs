@@ -1,10 +1,11 @@
-
 use std::{collections::VecDeque, io, time::{Duration, Instant}};
 use ratatui::{prelude::*, widgets::*};
 use crossterm::event::{self, Event, KeyCode};
 use tachyonfx::{fx, EffectManager};
 use sysinfo::{System, RefreshKind, Networks};
 use crate::block::Title;
+use libc::{kill, SIGKILL};
+
 const HISTORY_LEN: usize = 50;
 
 enum SortCategory {
@@ -28,6 +29,8 @@ fn main() -> io::Result<()> {
     let mut selected_process = 0;
     let mut sort_category = SortCategory::CpuPerCore;
     let mut current_interface = "eth0";
+    let mut show_info = false;
+
 
     loop {
         let now = Instant::now();
@@ -203,7 +206,7 @@ fn main() -> io::Result<()> {
                 SortCategory::Network => {}
             }
 
-            let rows: Vec<Row> = processes
+            let mut rows: Vec<Row> = processes
                 .iter()
                 .skip(selected_process)
                 .take(20)
@@ -229,6 +232,26 @@ fn main() -> io::Result<()> {
                 })
                 .collect();
 
+            if show_info {
+                if let Some(proc) = processes.get(selected_process) {
+                    let info = format!(
+                        "PID: {} | Name: {:?} | CPU: {:.2}% | Mem: {:.2} MB | Status: {:?}",
+                        proc.pid(),
+                        proc.name(),
+                        proc.cpu_usage(),
+                        proc.memory() as f64 / 1024.0 / 1024.0,
+                        proc.status()
+                    );
+                    rows.insert(1, Row::new(vec![
+                        info,
+                        "".to_string(),
+                        "".to_string(),
+                        "".to_string()
+                    ]).style(Style::default().fg(Color::Gray)));
+
+                }
+            }
+
             let header = Row::new(vec!["PID", "Name", "CPU", "Memory"])
                 .style(Style::default().fg(Color::LightBlue));
 
@@ -239,7 +262,7 @@ fn main() -> io::Result<()> {
                 Constraint::Length(12),
             ])
             .header(header)
-            .block(Block::default().title(Title::from(format!(" Top Processes - {}", match sort_category {
+            .block(Block::default().title(Title::from(format!(" Top Processes - Enter: Info | o/p: Nice | k: kill {}", match sort_category {
                 SortCategory::CpuPerCore => "CPU (per Core %)",
                 SortCategory::CpuAverage => "CPU (average %)",
                 SortCategory::Memory => "Memory Usage",
@@ -289,6 +312,48 @@ fn main() -> io::Result<()> {
                         current_interface = "eth0";
                     }
                     
+                    KeyCode::Enter => {
+                        show_info = !show_info;
+                    }
+                    KeyCode::Char('o') => {
+                        let mut processes: Vec<_> = system.processes().values().collect();
+                        if let Some(proc) = processes.get(selected_process) {
+                            let _ = std::process::Command::new("renice")
+                                .arg("-n")
+                                .arg("5")
+                                .arg("-p")
+                                .arg(proc.pid().to_string())
+                                .status();
+                        }
+                    }
+                    KeyCode::Char('p') => {
+                        let mut processes: Vec<_> = system.processes().values().collect();
+                        if let Some(proc) = processes.get(selected_process) {
+                            let _ = std::process::Command::new("renice")
+                                .arg("-n")
+                                .arg("-5")
+                                .arg("-p")
+                                .arg(proc.pid().to_string())
+                                .status();
+                        }
+                    }
+                    // effects.add_effect(fx::dissolve((100, tachyonfx::Interpolation::Linear)));
+                    KeyCode::Char('k') => {
+                        let mut processes: Vec<_> = system.processes().values().collect();
+                        if let Some(proc) = processes.get(selected_process) {
+                            let pid = proc.pid().as_u32() as i32;
+
+                            effects.add_effect(fx::dissolve((100, tachyonfx::Interpolation::Linear)));
+
+                            // Kill the process using libc
+                            unsafe {
+                                kill(pid, SIGKILL);
+                            }
+                        }
+                    }
+
+
+
                     KeyCode::Char('+') => {
                         let new_ms = (refresh_interval.as_millis() + 100).min(10000);
                         refresh_interval = Duration::from_millis(new_ms as u64);

@@ -1,0 +1,14 @@
+[package]
+name = "test_rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+prompted = "0.2.8"
+
+ratatui = "0.29"
+crossterm = "0.29"
+tachyonfx = "0.15"
+sysinfo = "0.36"
+
+textplots = "0.8"

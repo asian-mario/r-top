@@ -1,20 +1,24 @@
+
 use std::{collections::VecDeque, io, time::{Duration, Instant}};
 use ratatui::{prelude::*, widgets::*};
 use crossterm::event::{self, Event, KeyCode};
 use tachyonfx::{fx, EffectManager};
 use sysinfo::{System, RefreshKind, Networks};
-
+use crate::block::Title;
 const HISTORY_LEN: usize = 50;
 const REFRESH_INTERVAL: Duration = Duration::from_millis(2000);
+
+enum SortCategory {
+    CpuPerCore,
+    CpuAverage,
+    Memory,
+    Network,
+}
 
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
     let mut effects: EffectManager<()> = EffectManager::default();
-
-    // Shader effects
     effects.add_effect(fx::coalesce((500, tachyonfx::Interpolation::SineInOut)));
-
-    
 
     let refresh = RefreshKind::everything();
     let mut system = System::new_with_specifics(refresh);
@@ -22,11 +26,11 @@ fn main() -> io::Result<()> {
     let mut cpu_history: Vec<VecDeque<f32>> = vec![];
     let mut last_refresh = Instant::now();
     let mut selected_process = 0;
+    let mut sort_category = SortCategory::CpuPerCore;
+    let mut current_interface = "eth0";
 
     loop {
         let now = Instant::now();
-
-        // Refresh system info every 2000ms
         if now.duration_since(last_refresh) >= REFRESH_INTERVAL {
             system.refresh_all();
             last_refresh = now;
@@ -65,7 +69,6 @@ fn main() -> io::Result<()> {
                 ])
                 .split(area);
 
-            // CPU section
             let core_lines: Vec<ListItem> = system
                 .cpus()
                 .iter()
@@ -86,7 +89,34 @@ fn main() -> io::Result<()> {
 
             let cpu_list = List::new(core_lines)
                 .block(Block::default().title(" CPU Usage ").borders(Borders::ALL));
-            frame.render_widget(cpu_list, layout[0]);
+        let cpu_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+            ])
+            .split(layout[0]);
+
+        frame.render_widget(cpu_list, cpu_chunks[0]);
+
+        let avg_history: Vec<u64> = cpu_history
+            .iter()
+            .enumerate()
+            .map(|(_, buf)| {
+                let sum: f32 = buf.iter().sum();
+                let avg = if !buf.is_empty() { sum / buf.len() as f32 } else { 0.0 };
+                avg as u64
+            })
+            .collect();
+
+
+        let graph = Sparkline::default()
+            .block(Block::default().title(" CPU Avg Graph ").borders(Borders::ALL))
+            .data(&avg_history)
+            .style(Style::default().fg(Color::White));
+
+        frame.render_widget(graph, cpu_chunks[1]);
+
             let avg_color = if avg_cpu > 80.0 {
                 Color::Red
             } else if avg_cpu > 50.0 {
@@ -99,10 +129,6 @@ fn main() -> io::Result<()> {
                 .block(Block::default().title(" CPU Average ").borders(Borders::ALL));
             frame.render_widget(avg_text, layout[1]);
 
-            // CPU average
-            
-
-            // Memory bar
             let used = system.used_memory() as f64 / 1024.0 / 1024.0;
             let total = system.total_memory() as f64 / 1024.0 / 1024.0;
             let ratio = used / total;
@@ -120,26 +146,32 @@ fn main() -> io::Result<()> {
                 .label(format!("{:.2} / {:.2} GB", used / 1024.0, total / 1024.0));
             frame.render_widget(gauge, layout[2]);
 
-            // Network section
+            let net = if current_interface == "eth0" { eth0 } else { lo };
             let net_text = Paragraph::new(format!(
-                "eth0: RX {:>10} B | TX {:>10} B\nlo:   RX {:>10} B | TX {:>10} B",
-                eth0.map(|n| n.received()).unwrap_or(0),
-                eth0.map(|n| n.transmitted()).unwrap_or(0),
-                lo.map(|n| n.received()).unwrap_or(0),
-                lo.map(|n| n.transmitted()).unwrap_or(0),
+                "{}: RX {:>10} B | TX {:>10} B",
+                current_interface,
+                net.map(|n| n.received()).unwrap_or(0),
+                net.map(|n| n.transmitted()).unwrap_or(0),
             ))
             .style(Style::default().fg(Color::Cyan))
             .block(Block::default().title(" Network Usage ").borders(Borders::ALL));
             frame.render_widget(net_text, layout[3]);
 
-            // Process list
             let num_cores = system.cpus().len() as f32;
             let mut processes: Vec<_> = system.processes().values().collect();
-            processes.sort_by(|a, b| {
-                let a_usage = a.cpu_usage() / num_cores;
-                let b_usage = b.cpu_usage() / num_cores;
-                b_usage.partial_cmp(&a_usage).unwrap()
-            });
+            match sort_category {
+                SortCategory::CpuPerCore | SortCategory::CpuAverage => {
+                    processes.sort_by(|a, b| {
+                        let a_usage = a.cpu_usage() / num_cores;
+                        let b_usage = b.cpu_usage() / num_cores;
+                        b_usage.partial_cmp(&a_usage).unwrap()
+                    });
+                }
+                SortCategory::Memory => {
+                    processes.sort_by(|a, b| b.memory().cmp(&a.memory()));
+                }
+                SortCategory::Network => {}
+            }
 
             let rows: Vec<Row> = processes
                 .iter()
@@ -167,7 +199,6 @@ fn main() -> io::Result<()> {
                 })
                 .collect();
 
-
             let header = Row::new(vec!["PID", "Name", "CPU", "Memory"])
                 .style(Style::default().fg(Color::LightBlue));
 
@@ -178,44 +209,55 @@ fn main() -> io::Result<()> {
                 Constraint::Length(12),
             ])
             .header(header)
-            .block(Block::default().title(" Top Processes ").borders(Borders::ALL));
+            .block(Block::default().title(Title::from(format!(" Top Processes - {}", match sort_category {
+                SortCategory::CpuPerCore => "CPU (per Core %)",
+                SortCategory::CpuAverage => "CPU (average %)",
+                SortCategory::Memory => "Memory Usage",
+                SortCategory::Network => "Network Usage",
+            }))).borders(Borders::ALL));
             frame.render_widget(table, layout[4]);
 
-            // Legend
             let legend = Paragraph::new(
-                "↑/↓: Scroll  |  PgUp/PgDn: Jump  |  Home: Top  |  q: Quit"
+                "↑/↓: Scroll  |  PgUp/PgDn: Jump  |  Home: Top  |  ←/→: Sort  |  b/n: Net IF  |  q: Quit"
             )
             .style(Style::default().fg(Color::Gray))
             .block(Block::default().title(" Controls ").borders(Borders::ALL));
             frame.render_widget(legend, layout[5]);
 
-            // Animate effects every frame
             effects.process_effects(Duration::from_millis(16).into(), frame.buffer_mut(), area);
         })?;
 
-        // Keyboard controls
         if event::poll(Duration::from_millis(16))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('q') => break,
-        KeyCode::Left => {
-            // Navigate to previous category
-        },
-        KeyCode::Right => {
-            // Navigate to next category
-        },
-        KeyCode::Char('b') => {
-            // Switch to 'lo' interface
-        },
-        KeyCode::Char('n') => {
-            // Switch to 'eth0' interface
-        },
-    
                     KeyCode::Down => selected_process += 1,
                     KeyCode::Up => selected_process = selected_process.saturating_sub(1),
                     KeyCode::PageDown => selected_process += 5,
                     KeyCode::PageUp => selected_process = selected_process.saturating_sub(5),
                     KeyCode::Home => selected_process = 0,
+                    KeyCode::Left => {
+                        sort_category = match sort_category {
+                            SortCategory::CpuPerCore => SortCategory::Network,
+                            SortCategory::CpuAverage => SortCategory::CpuPerCore,
+                            SortCategory::Memory => SortCategory::CpuAverage,
+                            SortCategory::Network => SortCategory::Memory,
+                        };
+                    }
+                    KeyCode::Right => {
+                        sort_category = match sort_category {
+                            SortCategory::CpuPerCore => SortCategory::CpuAverage,
+                            SortCategory::CpuAverage => SortCategory::Memory,
+                            SortCategory::Memory => SortCategory::Network,
+                            SortCategory::Network => SortCategory::CpuPerCore,
+                        };
+                    }
+                    KeyCode::Char('b') => {
+                        current_interface = "lo";
+                    }
+                    KeyCode::Char('n') => {
+                        current_interface = "eth0";
+                    }
                     _ => {}
                 }
             }

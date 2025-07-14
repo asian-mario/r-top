@@ -12,7 +12,7 @@ fn main() -> io::Result<()> {
     let mut effects: EffectManager<()> = EffectManager::default();
 
     // Shader effects
-    effects.add_effect(fx::coalesce((2000, tachyonfx::Interpolation::SineInOut)));
+    effects.add_effect(fx::coalesce((500, tachyonfx::Interpolation::SineInOut)));
 
     
 
@@ -133,8 +133,13 @@ fn main() -> io::Result<()> {
             frame.render_widget(net_text, layout[3]);
 
             // Process list
+            let num_cores = system.cpus().len() as f32;
             let mut processes: Vec<_> = system.processes().values().collect();
-            processes.sort_by(|a, b| b.cpu_usage().partial_cmp(&a.cpu_usage()).unwrap());
+            processes.sort_by(|a, b| {
+                let a_usage = a.cpu_usage() / num_cores;
+                let b_usage = b.cpu_usage() / num_cores;
+                b_usage.partial_cmp(&a_usage).unwrap()
+            });
 
             let rows: Vec<Row> = processes
                 .iter()
@@ -144,24 +149,24 @@ fn main() -> io::Result<()> {
                 .map(|(i, proc)| {
                     let name = proc.name();
                     let name_str = name.to_string_lossy().to_string();
-                    let color = if proc.cpu_usage() > 50.0 {
+                    let usage = proc.cpu_usage() / num_cores;
+                    let color = if usage > 50.0 {
                         Color::Red
-                    } 
-                    else if proc.cpu_usage() > 20.0 && proc.cpu_usage() < 50.0{
+                    } else if usage > 20.0 {
                         Color::Yellow
-                    }
-                    else {
+                    } else {
                         Color::White
                     };
                     Row::new(vec![
                         proc.pid().to_string(),
                         name_str,
-                        format!("{:.2}%", proc.cpu_usage()),
+                        format!("{:.2}%", usage),
                         format!("{:.2} MB", proc.memory() as f64 / 1024.0 / 1024.0),
                     ])
                     .style(Style::default().fg(if i == 0 { Color::Yellow } else { color }))
                 })
                 .collect();
+
 
             let header = Row::new(vec!["PID", "Name", "CPU", "Memory"])
                 .style(Style::default().fg(Color::LightBlue));

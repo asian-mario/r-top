@@ -6,7 +6,6 @@ use tachyonfx::{fx, EffectManager};
 use sysinfo::{System, RefreshKind, Networks};
 use crate::block::Title;
 const HISTORY_LEN: usize = 50;
-const REFRESH_INTERVAL: Duration = Duration::from_millis(2000);
 
 enum SortCategory {
     CpuPerCore,
@@ -25,13 +24,14 @@ fn main() -> io::Result<()> {
 
     let mut cpu_history: Vec<VecDeque<f32>> = vec![];
     let mut last_refresh = Instant::now();
+    let mut refresh_interval = Duration::from_millis(2000);
     let mut selected_process = 0;
     let mut sort_category = SortCategory::CpuPerCore;
     let mut current_interface = "eth0";
 
     loop {
         let now = Instant::now();
-        if now.duration_since(last_refresh) >= REFRESH_INTERVAL {
+        if now.duration_since(last_refresh) >= refresh_interval {
             system.refresh_all();
             last_refresh = now;
         }
@@ -92,14 +92,14 @@ fn main() -> io::Result<()> {
         let cpu_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(50),
-                Constraint::Percentage(50),
+                Constraint::Percentage(70),
+                Constraint::Percentage(30),
             ])
             .split(layout[0]);
 
         frame.render_widget(cpu_list, cpu_chunks[0]);
 
-        let avg_history: Vec<u64> = cpu_history
+        let avg_history: VecDeque<u64> = cpu_history
             .iter()
             .enumerate()
             .map(|(_, buf)| {
@@ -110,12 +110,42 @@ fn main() -> io::Result<()> {
             .collect();
 
 
-        let graph = Sparkline::default()
-            .block(Block::default().title(" CPU Avg Graph ").borders(Borders::ALL))
-            .data(&avg_history)
-            .style(Style::default().fg(Color::White));
+        let graph_color = match (avg_history.back().unwrap_or(&0) / 10) % 3 {
+            0 => Color::White,
+            1 => Color::LightBlue,
+            _ => Color::LightCyan,
+        };
 
-        frame.render_widget(graph, cpu_chunks[1]);
+        let graph = Sparkline::default()
+            .block(Block::default()
+                .title(format!(" CPU per Core Graph - {}ms ", refresh_interval.as_millis()))
+                .borders(Borders::ALL))
+                .style(Style::default().fg(graph_color))
+            .data(&avg_history.iter().copied().collect::<Vec<u64>>());
+
+
+
+        let right_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+            ])
+            .split(cpu_chunks[1]);
+
+        frame.render_widget(graph, right_chunks[0]);
+
+        let cpu_info = &system.cpus()[0];
+        let cpu_info_text = format!(
+            "Model: {}\nVendor: {}\nFrequency: {} MHz",
+            cpu_info.brand(),
+            cpu_info.vendor_id(),
+            cpu_info.frequency()
+        );
+        let cpu_info_paragraph = Paragraph::new(cpu_info_text)
+            .style(Style::default().fg(Color::Gray))
+            .block(Block::default().title(" CPU Info ").borders(Borders::ALL));
+        frame.render_widget(cpu_info_paragraph, right_chunks[1]);
 
             let avg_color = if avg_cpu > 80.0 {
                 Color::Red
@@ -218,7 +248,7 @@ fn main() -> io::Result<()> {
             frame.render_widget(table, layout[4]);
 
             let legend = Paragraph::new(
-                "↑/↓: Scroll  |  PgUp/PgDn: Jump  |  Home: Top  |  ←/→: Sort  |  b/n: Net IF  |  q: Quit"
+                "↑/↓: Scroll  |  PgUp/PgDn: Jump  |  Home: Top  |  ←/→: Sort  |  b/n: Net IF  |  +/-: Change Refresh | q: Quit"
             )
             .style(Style::default().fg(Color::Gray))
             .block(Block::default().title(" Controls ").borders(Borders::ALL));
@@ -258,7 +288,17 @@ fn main() -> io::Result<()> {
                     KeyCode::Char('n') => {
                         current_interface = "eth0";
                     }
-                    _ => {}
+                    
+                    KeyCode::Char('+') => {
+                        let new_ms = (refresh_interval.as_millis() + 100).min(10000);
+                        refresh_interval = Duration::from_millis(new_ms as u64);
+                    }
+                    KeyCode::Char('-') => {
+                        let new_ms = refresh_interval.as_millis().saturating_sub(100).max(100);
+                        refresh_interval = Duration::from_millis(new_ms as u64);
+                    }
+
+                _ => {}
                 }
             }
         }

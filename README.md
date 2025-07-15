@@ -1,6 +1,6 @@
 # 🧠 b-top (bad-top)
 
-**b-top** (short for **bad-top**) is a terminal-based, Rust-powered system resource viewer for UNIX-like systems. Inspired by tools like `bashtop` and `htop`, `b-top` provides a visually rich and interactive interface for monitoring CPU, memory, network, and process activity — all rendered with smooth animations and intuitive controls.
+**b-top** (short for **bad-top**) is a terminal-based, Rust-powered system resource viewer for UNIX-like systems. Inspired by tools like `bashtop` and `htop`, `b-top` provides a visually rich and interactive interface for monitoring CPU, memory, network, and process activity, rendered with smooth animations and intuitive controls.
 
 ---
 
@@ -20,7 +20,7 @@
 ## 🛠️ Built With
 
 - Rust
-- [ratati – Terminal UI rendering
+- ratatui – Terminal UI rendering
 - sysinfo – System information
 - crossterm – Terminal input handling
 - tachyonfx – Animation effects
@@ -51,7 +51,7 @@
 ### Build and Run
 
 ```bash
-git clone https://github.com/yourusername/b-top.git
+git clone https://github.com/asian-mario/b-top.git
 cd b-top
 cargo run --release
 ```

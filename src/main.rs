@@ -212,17 +212,32 @@ fn main() -> io::Result<()> {
 
             frame.render_widget(graph, right_chunks[0]);
 
+            
             let cpu_info = &system.cpus()[0];
+            let logical_threads = system.cpus().len();
+            let physical_cores = System::physical_core_count()
+                .unwrap_or(logical_threads);
+            let current_speed = cpu_info.frequency();
+
             let cpu_info_text = format!(
-                "Model: {}\nVendor: {}\nFrequency: {} MHz",
+                "Model:           {}\n\
+                Vendor:          {}\n\
+                Physical Cores:  {}\n\
+                Logical Threads: {}\n\
+                Base Clock Speed:     {} MHz",
                 cpu_info.brand(),
                 cpu_info.vendor_id(),
-                cpu_info.frequency()
+                physical_cores,
+                logical_threads,
+                current_speed
             );
+
             let cpu_info_paragraph = Paragraph::new(cpu_info_text)
                 .style(Style::default().fg(Color::Gray))
                 .block(Block::default().title(" CPU Info ").borders(Borders::ALL));
+
             frame.render_widget(cpu_info_paragraph, right_chunks[1]);
+
 
             let avg_color = if avg_cpu > 80.0 {
                 Color::Red

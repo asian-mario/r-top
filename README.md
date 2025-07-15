@@ -59,7 +59,7 @@ cargo run --release
 ---
 ### Downloading b-top
 ```bash
-wget https://github.com/asian-mario/b-top/releases/download/v0.1/b-top-linux-x86_64.tar.gz
+wget https://github.com/asian-mario/b-top/releases/download/[VERSION]/b-top-linux-x86_64.tar.gz
 tar -xzf b-top-linux-x86_64.tar.gz
 sudo mv b-top /usr/local/bin/
 

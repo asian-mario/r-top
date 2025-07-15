@@ -35,7 +35,7 @@ fn format_bytes(bytes: u64) -> String {
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
     let mut effects: EffectManager<()> = EffectManager::default();
-    effects.add_effect(fx::coalesce((500, tachyonfx::Interpolation::QuintInOut)));
+    effects.add_effect(fx::coalesce((400, tachyonfx::Interpolation::QuintInOut)));
 
     let refresh = RefreshKind::everything();
     let mut system = System::new_with_specifics(refresh);
@@ -49,8 +49,12 @@ fn main() -> io::Result<()> {
     let mut current_interface = "eth0";
     let mut show_info = false;
     let mut info_area = ratatui::layout::Rect::default();
+    let mut net_area = ratatui::layout::Rect::default();
 
 
+    let sweep_duration_ms = 300; 
+    let switch_interface_at = Instant::now() + Duration::from_millis(sweep_duration_ms);
+    Duration::from_millis(sweep_duration_ms);
 
     loop {
         let now = Instant::now();
@@ -320,7 +324,7 @@ fn main() -> io::Result<()> {
             ))
             .style(Style::default().fg(Color::White))
             .block(Block::default().title(" Network Usage ").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)) );
-
+            net_area = layout[3];
             frame.render_widget(net_text, layout[3]);
 
             let num_cores    = system.cpus().len() as f32;
@@ -433,22 +437,49 @@ fn main() -> io::Result<()> {
                         };
                     }
                     KeyCode::Char('b') => {
-                        current_interface = "lo";
+                        let color = Color::from_u32(0x1E1E1E);
+                        let timer = (200, Interpolation::QuintInOut);
+                         effects.add_effect(
+                            fx::sweep_in(
+                                Motion::LeftToRight,
+                                20,
+                                10,
+                                color,
+                                timer,
+                            ).with_area(net_area)
+                        );
+                        if Instant::now() >= switch_interface_at && current_interface != "lo" {
+                            current_interface = "lo";
+                        }
                     }
                     KeyCode::Char('n') => {
-                        current_interface = "eth0";
+                        let color = Color::from_u32(0x1E1E1E);
+                        let timer = (200, Interpolation::QuintInOut);
+                         effects.add_effect(
+                            fx::sweep_in(
+                                Motion::LeftToRight,
+                                20,
+                                10,
+                                color,
+                                timer,
+                            ).with_area(net_area)                    
+                        );
+                        
+                        if Instant::now() >= switch_interface_at && current_interface != "eth0" {
+                            current_interface = "eth0";
+                        }
                     }
                     
                     KeyCode::Enter => {
-                        let color = Color::from_u32(0x1d2021);
-                        let timer = (100, Interpolation::QuintInOut);
+                        let color = Color::from_u32(0x1E1E1E);
+                        let timer = (200, Interpolation::QuintInOut);
 
                         if show_info {
                             effects.add_effect(
                                 fx::sweep_in(
-                                    Motion::RightToLeft,
+                                    Motion::LeftToRight,
                                     20,
-                                    0,
+                                    10,
                                     color,
                                     timer,
                                 ).with_area(info_area)
@@ -456,9 +487,9 @@ fn main() -> io::Result<()> {
                         } else {
                             effects.add_effect(
                                 fx::sweep_in(
-                                    Motion::LeftToRight,
+                                    Motion::RightToLeft,
                                     20,
-                                    0,
+                                    10,
                                     color,
                                     timer,
                                 ).with_area(info_area)

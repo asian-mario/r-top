@@ -1,5 +1,5 @@
 use std::{collections::VecDeque, io, time::{Duration, Instant}};
-use ratatui::{prelude::*, widgets::*};
+use ratatui::{prelude::*, symbols::bar::{Set}, widgets::*};
 use crossterm::event::{self, Event, KeyCode};
 use tachyonfx::{fx, EffectManager, Motion, Interpolation};
 use sysinfo::{System, RefreshKind, Networks};
@@ -96,83 +96,129 @@ fn main() -> io::Result<()> {
                 ])
                 .split(area);
 
-            let core_lines: Vec<ListItem> = system
-                .cpus()
-                .iter()
-                .enumerate()
-                .map(|(i, cpu)| {
+            let cpu_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(70),
+                    Constraint::Percentage(30),
+                ])
+                .split(layout[0]);
+
+            // Draw the bordered block first
+            let bordered_block = Block::default()
+                .title(" CPU Usage ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::LightGreen));
+
+            frame.render_widget(&bordered_block, cpu_chunks[0]);
+
+            // Get the inner area to render content inside the border
+            let inner_area = bordered_block.inner(cpu_chunks[0]);
+
+            let core_count = system.cpus().len();
+            let max_rows = 8; // Adjust based on terminal height
+            let columns = (core_count + max_rows - 1) / max_rows;
+
+            let core_columns = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints(vec![Constraint::Percentage(100 / columns as u16); columns])
+                .split(inner_area);
+
+            for (col, chunk) in core_columns.iter().enumerate() {
+                let start = col * max_rows;
+                let end = ((col + 1) * max_rows).min(core_count);
+
+                let rows: Vec<Rect> = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints(vec![Constraint::Length(1); end - start])
+                    .split(*chunk)
+                    .to_vec();
+
+                for (i, area) in (start..end).zip(rows.into_iter()) {
+                    let cpu = &system.cpus()[i];
                     let usage = cpu.cpu_usage();
-                    let color = if usage > 80.0 {
-                        Color::Red
-                    } else if usage > 35.0 {
-                        Color::LightYellow
+                    let ratio = (usage / 100.0).max(0.01); // Ensure at least a tiny bar
+
+                    let color = if usage < 50.0 {
+                        Color::Rgb((255.0 * (usage / 50.0)) as u8, 255, 0)
                     } else {
-                        Color::White
+                        Color::Rgb(255, (255.0 * ((100.0 - usage) / 50.0)) as u8, 0)
                     };
-                    ListItem::new(format!("Core {:>2}: {:>5.2}%", i, usage))
-                        .style(Style::default().fg(color))
+
+                    // Split each row into label and bar
+                    let split = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Length(10), Constraint::Min(10)])
+                        .split(area);
+
+                    let label_area = split[0];
+                    let bar_area = split[1];
+
+                    let label = Paragraph::new(format!("Core {:>2}", i))
+                        .style(Style::default().fg(Color::White));
+                    frame.render_widget(label, label_area);
+
+                    let gauge = Gauge::default()
+                        .gauge_style(Style::default().fg(color).bg(Color::Black))
+                        .ratio(ratio as f64)
+                        .label(format!("{:>5.1}%", usage));
+                    frame.render_widget(gauge, bar_area);
+                }
+            }
+
+            let avg_history: Vec<u64> = (0..HISTORY_LEN)
+                .map(|i| {
+                    let sum: f32 = cpu_history
+                        .iter()
+                        .filter_map(|core| core.get(i))
+                        .sum();
+                    let count = cpu_history.iter().filter(|core| core.get(i).is_some()).count();
+                    if count > 0 {
+                        (sum / count as f32) as u64
+                    } else {
+                        0
+                    }
                 })
                 .collect();
 
-            let cpu_list = List::new(core_lines)
-                .block(Block::default().title(" CPU Usage ").borders(Borders::ALL).border_style(Style::default().fg(Color::LightGreen)) );
-        let cpu_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(70),
-                Constraint::Percentage(30),
-            ])
-            .split(layout[0]);
+            let graph_color = if avg_cpu > 80.0 {
+                Color::Red
+            } else if avg_cpu > 40.0 {
+                Color::Yellow
+            } else {
+                Color::White
+            };
 
-        frame.render_widget(cpu_list, cpu_chunks[0]);
-
-        let avg_history: VecDeque<u64> = cpu_history
-            .iter()
-            .enumerate()
-            .map(|(_, buf)| {
-                let sum: f32 = buf.iter().sum();
-                let avg = if !buf.is_empty() { sum / buf.len() as f32 } else { 0.0 };
-                avg as u64
-            })
-            .collect();
-
-
-        let graph_color = match (avg_history.back().unwrap_or(&0) / 10) % 3 {
-            0 => Color::White,
-            1 => Color::LightBlue,
-            _ => Color::LightCyan,
-        };
-
-        let graph = Sparkline::default()
-            .block(Block::default()
-                .title(format!(" CPU per Core Graph - {}ms ", refresh_interval.as_millis()))
-                .borders(Borders::ALL))
+            let graph = Sparkline::default()
+                .block(Block::default()
+                    .title(format!(" CPU Avg Usage (0–100%) - {}ms ", refresh_interval.as_millis()))
+                    .borders(Borders::ALL))
                 .style(Style::default().fg(graph_color))
-            .data(&avg_history.iter().copied().collect::<Vec<u64>>());
+                .data(&avg_history)
+                .max(100)
+                .bar_set(Set::default());
 
+            let right_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(50),
+                ])
+                .split(cpu_chunks[1]);
 
+            frame.render_widget(graph, right_chunks[0]);
 
-        let right_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(50),
-                Constraint::Percentage(50),
-            ])
-            .split(cpu_chunks[1]);
-
-        frame.render_widget(graph, right_chunks[0]);
-
-        let cpu_info = &system.cpus()[0];
-        let cpu_info_text = format!(
-            "Model: {}\nVendor: {}\nFrequency: {} MHz",
-            cpu_info.brand(),
-            cpu_info.vendor_id(),
-            cpu_info.frequency()
-        );
-        let cpu_info_paragraph = Paragraph::new(cpu_info_text)
-            .style(Style::default().fg(Color::Gray))
-            .block(Block::default().title(" CPU Info ").borders(Borders::ALL));
-        frame.render_widget(cpu_info_paragraph, right_chunks[1]);
+            let cpu_info = &system.cpus()[0];
+            let cpu_info_text = format!(
+                "Model: {}\nVendor: {}\nFrequency: {} MHz",
+                cpu_info.brand(),
+                cpu_info.vendor_id(),
+                cpu_info.frequency()
+            );
+            let cpu_info_paragraph = Paragraph::new(cpu_info_text)
+                .style(Style::default().fg(Color::Gray))
+                .block(Block::default().title(" CPU Info ").borders(Borders::ALL));
+            frame.render_widget(cpu_info_paragraph, right_chunks[1]);
 
             let avg_color = if avg_cpu > 80.0 {
                 Color::Red

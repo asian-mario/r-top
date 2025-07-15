@@ -7,6 +7,10 @@ use crate::block::Title;
 use libc::{kill, SIGKILL};
 
 const HISTORY_LEN: usize = 50;
+static mut SESSION_TOTAL_BYTES: u64 = 0;
+static mut PREV_RX: u64 = 0;
+static mut PREV_TX: u64 = 0;
+
 
 enum SortCategory {
     CpuPerCore,
@@ -15,6 +19,19 @@ enum SortCategory {
     Network,
 }
 
+fn format_bytes(bytes: u64) -> String {
+    if bytes >= 1024 * 1024 * 1024 {
+        format!("{:.2} GB", bytes as f64 / 1024.0 / 1024.0 / 1024.0)
+    } else if bytes >= 1024 * 1024 {
+        format!("{:.2} MB", bytes as f64 / 1024.0 / 1024.0)
+    } else if bytes >= 1024 {
+        format!("{:.2} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
+
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
     let mut effects: EffectManager<()> = EffectManager::default();
@@ -22,6 +39,7 @@ fn main() -> io::Result<()> {
 
     let refresh = RefreshKind::everything();
     let mut system = System::new_with_specifics(refresh);
+    let mut networks = Networks::new_with_refreshed_list();
 
     let mut cpu_history: Vec<VecDeque<f32>> = vec![];
     let mut last_refresh = Instant::now();
@@ -36,6 +54,11 @@ fn main() -> io::Result<()> {
         let now = Instant::now();
         if now.duration_since(last_refresh) >= refresh_interval {
             system.refresh_all();
+            networks.refresh(false);
+            /*rant:
+                I understand that sysinfo is still under development but WHY does refreshing all the entire system to update proc data NOT also refresh the netwroks
+                it took me ages because I have the combined IQ of a lukewarm mayonnaise jar to figure it out.
+             */
             last_refresh = now;
         }
 
@@ -53,7 +76,6 @@ fn main() -> io::Result<()> {
         }
 
         let avg_cpu: f32 = system.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / system.cpus().len() as f32;
-        let networks = Networks::new_with_refreshed_list();
         let eth0 = networks.get("eth0");
         let lo = networks.get("lo");
 
@@ -180,17 +202,42 @@ fn main() -> io::Result<()> {
             frame.render_widget(gauge, layout[2]);
 
             let net = if current_interface == "eth0" { eth0 } else { lo };
+
+            let (rx, tx) = match net {
+                Some(n) => (n.received(), n.transmitted()),
+                None => (0, 0),
+            };
+
+            let (delta_rx, delta_tx, total_delta) = unsafe {
+                let delta_rx = rx.saturating_sub(PREV_RX);
+                let delta_tx = tx.saturating_sub(PREV_TX);
+                PREV_RX = rx;
+                PREV_TX = tx;
+                let total_delta = delta_rx + delta_tx;
+                (delta_rx, delta_tx, total_delta)
+            };
+
+            unsafe {
+                SESSION_TOTAL_BYTES += total_delta;
+            }
+
+            let total_mib = (rx + tx) as f64 / 1024.0 / 1024.0;
+            let session_mib = unsafe { SESSION_TOTAL_BYTES as f64 / 1024.0 / 1024.0 };
+
             let net_text = Paragraph::new(format!(
-                "{}: RX {:>10} B | TX {:>10} B",
+                "{} | ▽ RX: {} | △ TX: {} | ▷ RX+TX: {:.2} MiB | Session: {:.2} MiB",
                 current_interface,
-                net.map(|n| n.received()).unwrap_or(0),
-                net.map(|n| n.transmitted()).unwrap_or(0),
+                format_bytes(rx),
+                format_bytes(tx),
+                total_mib,
+                session_mib
             ))
             .style(Style::default().fg(Color::Cyan))
             .block(Block::default().title(" Network Usage ").borders(Borders::ALL));
+
             frame.render_widget(net_text, layout[3]);
 
-            let num_cores = system.cpus().len() as f32;
+            let num_cores    = system.cpus().len() as f32;
             let mut processes: Vec<_> = system.processes().values().collect();
             match sort_category {
                 SortCategory::CpuPerCore | SortCategory::CpuAverage => {
@@ -234,19 +281,11 @@ fn main() -> io::Result<()> {
 
             if show_info {
                 if let Some(proc) = processes.get(selected_process) {
-                    let info = format!(
-                        "PID: {} | Name: {:?} | CPU: {:.2}% | Mem: {:.2} MB | Status: {:?}",
-                        proc.pid(),
-                        proc.name(),
-                        proc.cpu_usage(),
-                        proc.memory() as f64 / 1024.0 / 1024.0,
-                        proc.status()
-                    );
                     rows.insert(1, Row::new(vec![
-                        info,
-                        "".to_string(),
-                        "".to_string(),
-                        "".to_string()
+                        format!("{}", proc.pid()),
+                        format!("{:?}", proc.name()),
+                        format!("Core: {}", proc.cpu_usage() as usize % system.cpus().len()),
+                        format!("Status: {:?}", proc.status()),
                     ]).style(Style::default().fg(Color::Gray)));
 
                 }
@@ -315,6 +354,7 @@ fn main() -> io::Result<()> {
                     KeyCode::Enter => {
                         show_info = !show_info;
                     }
+                    // why would this not be a mutable? won't system processes change over time?
                     KeyCode::Char('o') => {
                         let mut processes: Vec<_> = system.processes().values().collect();
                         if let Some(proc) = processes.get(selected_process) {

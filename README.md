@@ -37,7 +37,8 @@
 | `← / →`        | Change sorting category          |
 | `b / n`        | Switch between `lo` and `eth0`   |
 | `q`            | Quit the application             |
-
+| `ENTER`        | View more process info           |
+| `k`            | Kill selected process            |
 ---
 
 ## 📦 Installation

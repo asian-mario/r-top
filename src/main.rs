@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, io, time::{Duration, Instant}};
 use ratatui::{prelude::*, widgets::*};
 use crossterm::event::{self, Event, KeyCode};
-use tachyonfx::{fx, EffectManager};
+use tachyonfx::{fx, EffectManager, Motion, Interpolation};
 use sysinfo::{System, RefreshKind, Networks};
 use crate::block::Title;
 use libc::{kill, SIGKILL};
@@ -35,7 +35,7 @@ fn format_bytes(bytes: u64) -> String {
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
     let mut effects: EffectManager<()> = EffectManager::default();
-    effects.add_effect(fx::coalesce((500, tachyonfx::Interpolation::SineInOut)));
+    effects.add_effect(fx::coalesce((500, tachyonfx::Interpolation::QuintInOut)));
 
     let refresh = RefreshKind::everything();
     let mut system = System::new_with_specifics(refresh);
@@ -48,6 +48,8 @@ fn main() -> io::Result<()> {
     let mut sort_category = SortCategory::CpuPerCore;
     let mut current_interface = "eth0";
     let mut show_info = false;
+    let mut info_area = ratatui::layout::Rect::default();
+
 
 
     loop {
@@ -102,10 +104,10 @@ fn main() -> io::Result<()> {
                     let usage = cpu.cpu_usage();
                     let color = if usage > 80.0 {
                         Color::Red
-                    } else if usage > 50.0 {
-                        Color::Yellow
+                    } else if usage > 35.0 {
+                        Color::LightYellow
                     } else {
-                        Color::Green
+                        Color::White
                     };
                     ListItem::new(format!("Core {:>2}: {:>5.2}%", i, usage))
                         .style(Style::default().fg(color))
@@ -113,7 +115,7 @@ fn main() -> io::Result<()> {
                 .collect();
 
             let cpu_list = List::new(core_lines)
-                .block(Block::default().title(" CPU Usage ").borders(Borders::ALL));
+                .block(Block::default().title(" CPU Usage ").borders(Borders::ALL).border_style(Style::default().fg(Color::LightGreen)) );
         let cpu_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
@@ -175,14 +177,52 @@ fn main() -> io::Result<()> {
             let avg_color = if avg_cpu > 80.0 {
                 Color::Red
             } else if avg_cpu > 50.0 {
-                Color::Yellow
+                Color::LightYellow
             } else {
-                Color::Green
+                Color::LightGreen
             };
-            let avg_text = Paragraph::new(format!("Average CPU Usage: {:.2}%", avg_cpu))
-                .style(Style::default().fg(avg_color))
-                .block(Block::default().title(" CPU Average ").borders(Borders::ALL));
+
+            // Find the hardest working core and its top process
+            let (busiest_core_idx, busiest_core_usage) = system
+                .cpus()
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.cpu_usage().partial_cmp(&b.cpu_usage()).unwrap())
+                .unwrap_or((0, &system.cpus()[0]));
+
+            let mut top_process_name = "N/A".to_string();
+            let mut top_process_pid = 0;
+
+            for process in system.processes().values() {
+                if process.cpu_usage() > 0.0 && process.cpu_usage() as usize % system.cpus().len() == busiest_core_idx {
+                    top_process_name = process.name().to_string_lossy().to_string();
+                    top_process_pid = process.pid().as_u32();
+                    break;
+                }
+            }
+
+            let left = format!("Average CPU Usage: {:.2}% | ", avg_cpu);
+            let right = format!(
+                "Busiest Core : {} | {:.2}% - PID {} ({})",
+                busiest_core_idx,
+                busiest_core_usage.cpu_usage(),
+                top_process_pid,
+                top_process_name
+            );
+
+
+            let avg_text = Paragraph::new(format!("{:<10}{}", left, right))
+                .style(Style::default().fg(Color::White)) 
+                .block(
+                    Block::default()
+                        .title(" CPU Average ")
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(avg_color)) 
+                );
+
+
             frame.render_widget(avg_text, layout[1]);
+
 
             let used = system.used_memory() as f64 / 1024.0 / 1024.0;
             let total = system.total_memory() as f64 / 1024.0 / 1024.0;
@@ -208,7 +248,7 @@ fn main() -> io::Result<()> {
                 None => (0, 0),
             };
 
-            let (delta_rx, delta_tx, total_delta) = unsafe {
+            let (_delta_rx, _delta_tx, total_delta) = unsafe {
                 let delta_rx = rx.saturating_sub(PREV_RX);
                 let delta_tx = tx.saturating_sub(PREV_TX);
                 PREV_RX = rx;
@@ -232,8 +272,8 @@ fn main() -> io::Result<()> {
                 total_mib,
                 session_mib
             ))
-            .style(Style::default().fg(Color::Cyan))
-            .block(Block::default().title(" Network Usage ").borders(Borders::ALL));
+            .style(Style::default().fg(Color::White))
+            .block(Block::default().title(" Network Usage ").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)) );
 
             frame.render_widget(net_text, layout[3]);
 
@@ -275,7 +315,7 @@ fn main() -> io::Result<()> {
                         format!("{:.2}%", usage),
                         format!("{:.2} MB", proc.memory() as f64 / 1024.0 / 1024.0),
                     ])
-                    .style(Style::default().fg(if i == 0 { Color::Yellow } else { color }))
+                    .style(Style::default().fg(if i == 0 { Color::LightCyan } else { color }))
                 })
                 .collect();
 
@@ -286,27 +326,29 @@ fn main() -> io::Result<()> {
                         format!("{:?}", proc.name()),
                         format!("Core: {}", proc.cpu_usage() as usize % system.cpus().len()),
                         format!("Status: {:?}", proc.status()),
-                    ]).style(Style::default().fg(Color::Gray)));
+                    ]).style(Style::default().fg(Color::Cyan)));
 
                 }
             }
 
             let header = Row::new(vec!["PID", "Name", "CPU", "Memory"])
-                .style(Style::default().fg(Color::LightBlue));
+                .style(Style::default().fg(Color::Gray));
 
             let table = Table::new(rows, &[
                 Constraint::Length(8),
                 Constraint::Percentage(50),
                 Constraint::Length(10),
-                Constraint::Length(12),
+                Constraint::Length(20),
             ])
             .header(header)
+            .style(Style::default().fg(Color::LightCyan))
             .block(Block::default().title(Title::from(format!(" Top Processes - Enter: Info | o/p: Nice | k: kill {}", match sort_category {
                 SortCategory::CpuPerCore => "CPU (per Core %)",
                 SortCategory::CpuAverage => "CPU (average %)",
                 SortCategory::Memory => "Memory Usage",
                 SortCategory::Network => "Network Usage",
             }))).borders(Borders::ALL));
+            info_area = layout[4];
             frame.render_widget(table, layout[4]);
 
             let legend = Paragraph::new(
@@ -352,8 +394,34 @@ fn main() -> io::Result<()> {
                     }
                     
                     KeyCode::Enter => {
+                        let color = Color::from_u32(0x1d2021);
+                        let timer = (100, Interpolation::QuintInOut);
+
+                        if show_info {
+                            effects.add_effect(
+                                fx::sweep_in(
+                                    Motion::RightToLeft,
+                                    20,
+                                    0,
+                                    color,
+                                    timer,
+                                ).with_area(info_area)
+                            );
+                        } else {
+                            effects.add_effect(
+                                fx::sweep_in(
+                                    Motion::LeftToRight,
+                                    20,
+                                    0,
+                                    color,
+                                    timer,
+                                ).with_area(info_area)
+                            );
+                        }
+
                         show_info = !show_info;
                     }
+
                     // why would this not be a mutable? won't system processes change over time?
                     KeyCode::Char('o') => {
                         let mut processes: Vec<_> = system.processes().values().collect();
@@ -383,12 +451,14 @@ fn main() -> io::Result<()> {
                         if let Some(proc) = processes.get(selected_process) {
                             let pid = proc.pid().as_u32() as i32;
 
-                            effects.add_effect(fx::dissolve((100, tachyonfx::Interpolation::Linear)));
+                            effects.add_effect(fx::dissolve((100, tachyonfx::Interpolation::QuintInOut)).with_area(info_area));
 
                             // Kill the process using libc
                             unsafe {
                                 kill(pid, SIGKILL);
                             }
+                            effects.add_effect(fx::coalesce((100, tachyonfx::Interpolation::QuintInOut)).with_area(info_area));
+
                         }
                     }
 

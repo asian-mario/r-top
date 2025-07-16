@@ -40,8 +40,25 @@ fn main() -> io::Result<()> {
 
     let refresh = RefreshKind::everything();
     let mut system = System::new_with_specifics(refresh);
+    /*
+        am i stupid? after reading this i could have just called new_all() instead of this, which is literally what new_all does
+     */
     let mut networks = Networks::new_with_refreshed_list();
-    let disks = Disks::new_with_refreshed_list();
+    let mut disks = Disks::new_with_refreshed_list();
+    /*
+        TODO: investigate whether this is me being an idiot again or maybe something is wrong with system declaration (since why would system.disks not be valid)
+        3:12 yeah i'm an idiot:
+            system.disks doesnt work after going through the repo because disk is its own .rs file with its own implementation
+
+            okay but this still doesnt explain why calling a full system refresh doesn't refresh networks.
+        3:57 NO WAY:
+            so the reason why it doesnt refresh when a full system refresh is called is because I didn't use new_all() when declaring system. DOY. When you do RefreshKind::everything()
+            it only has CPU, mem, proc
+
+            so im spewing b.s previously
+
+
+     */
 
     let mut cpu_history: Vec<VecDeque<f32>> = vec![];
     let mut last_refresh = Instant::now();
@@ -57,9 +74,13 @@ fn main() -> io::Result<()> {
     let mut net_area = ratatui::layout::Rect::default();
     let mut disk_area = ratatui::layout::Rect::default();
 
-    //custom colors
-    let custom_green = Color::Rgb(100, 149, 107);
-    let custom_yellow = Color::Rgb(138, 136, 46);
+    //custom colors, TODO make config
+    let custom_purple = Color::Rgb(126, 48, 219);
+    let custom_lightpurple = Color::Rgb(137, 125, 219);
+    let custom_g_purple = Color::Rgb(126, 48, 219);
+    let custom_bg_purple = Color::Rgb(31, 3, 64);
+
+    let pastel_green = Color::Rgb(119, 221, 119);
 
     let sweep_duration_ms = 300; 
     let switch_interface_at = Instant::now() + Duration::from_millis(sweep_duration_ms);
@@ -74,10 +95,13 @@ fn main() -> io::Result<()> {
         if now.duration_since(last_refresh) >= refresh_interval {
             system.refresh_all();
             networks.refresh(false);
-            /*rant:
-                I understand that sysinfo is still under development but WHY does refreshing all the entire system to update proc data NOT also refresh the netwroks
+            /*
+                WHY does refreshing all the entire system to update proc data NOT also refresh the netwroks
                 it took me ages because I have the combined IQ of a lukewarm mayonnaise jar to figure it out.
+
+                Okay so here system.refresh_all() which should also refreshes the disk (presumably)
              */
+            disks.refresh(false);
             last_refresh = now;
         }
 
@@ -116,6 +140,13 @@ fn main() -> io::Result<()> {
         let lo = networks.get("lo");
 
         terminal.draw(|frame| {
+            let full_area = frame.area(); 
+            
+            frame.render_widget(
+                Block::default().style(Style::default().bg(Color::Black)), // or any color
+                full_area,
+            );
+
             let area = frame.area();
             let layout = Layout::default()
                 .direction(Direction::Vertical)
@@ -142,7 +173,7 @@ fn main() -> io::Result<()> {
                 .title(" CPU Usage ")
                 .title_style(Style::default().fg(Color::White)) 
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(custom_green));
+                .border_style(Style::default().fg(custom_purple));
 
             frame.render_widget(&bordered_block, cpu_chunks[0]);
 
@@ -174,7 +205,7 @@ fn main() -> io::Result<()> {
                     let ratio = (usage / 100.0).max(0.01); // Ensure at least a tiny bar
 
                     let color = if usage < 50.0 {
-                        Color::Rgb((255.0 * (usage / 50.0)) as u8, 255, 0)
+                        Color::Rgb((119.0 * (usage / 50.0)) as u8, 221, 119)
                     } else {
                         Color::Rgb(255, (255.0 * ((100.0 - usage) / 50.0)) as u8, 0)
                     };
@@ -277,7 +308,7 @@ fn main() -> io::Result<()> {
             } else if avg_cpu > 50.0 {
                 Color::LightYellow
             } else {
-                custom_green
+                custom_purple
             };
 
             // Find the hardest working core and its top process
@@ -341,14 +372,14 @@ fn main() -> io::Result<()> {
                 .title(title)
                 .title_style(Style::default().fg(Color::White)) 
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(custom_yellow));
+                .border_style(Style::default().fg(custom_lightpurple));
 
             let usage = current_disk.total_space().saturating_sub(current_disk.available_space()) as f64
                 / current_disk.total_space().max(1) as f64;
 
             let disk_gauge = Gauge::default()
                 .block(Block::default().borders(Borders::NONE))
-                .gauge_style(Style::default().fg(Color::Green).bg(Color::Black))
+                .gauge_style(Style::default().fg(custom_g_purple).bg(custom_bg_purple))
                 .ratio(usage)
                 .label(format!("{:.1}%", usage * 100.0));
             
@@ -368,11 +399,11 @@ fn main() -> io::Result<()> {
             } else if ratio > 0.7 {
                 Color::Yellow
             } else {
-                Color::Green
+                custom_g_purple
             };
             let gauge = Gauge::default()
-                .block(Block::default().title(" Memory Usage ").title_style(Style::default().fg(Color::White)).borders(Borders::ALL)).set_style(Style::default().fg(custom_yellow))
-                .gauge_style(Style::default().fg(mem_color).bg(Color::Black))
+                .block(Block::default().title(" Memory Usage ").title_style(Style::default().fg(Color::White)).borders(Borders::ALL)).set_style(Style::default().fg(custom_lightpurple))
+                .gauge_style(Style::default().fg(mem_color).bg(custom_bg_purple))
                 .ratio(ratio)
                 .label(format!("{:.2} / {:.2} GB", used / 1024.0, total / 1024.0));
             frame.render_widget(gauge, layout[2]);

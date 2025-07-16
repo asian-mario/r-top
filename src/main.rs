@@ -1,10 +1,11 @@
 use std::{collections::VecDeque, io, time::{Duration, Instant}};
-use ratatui::{prelude::*, symbols::bar::{Set}, widgets::*};
+use ratatui::{prelude::*, style::Styled, symbols::bar::Set, widgets::*};
 use crossterm::event::{self, Event, KeyCode};
 use tachyonfx::{fx, EffectManager, Motion, Interpolation};
-use sysinfo::{System, RefreshKind, Networks};
+use sysinfo::{System, RefreshKind, Networks, Disks};
 use crate::block::Title;
 use libc::{kill, SIGKILL};
+
 
 const HISTORY_LEN: usize = 50;
 static mut SESSION_TOTAL_BYTES: u64 = 0;
@@ -40,6 +41,7 @@ fn main() -> io::Result<()> {
     let refresh = RefreshKind::everything();
     let mut system = System::new_with_specifics(refresh);
     let mut networks = Networks::new_with_refreshed_list();
+    let disks = Disks::new_with_refreshed_list();
 
     let mut cpu_history: Vec<VecDeque<f32>> = vec![];
     let mut last_refresh = Instant::now();
@@ -48,9 +50,15 @@ fn main() -> io::Result<()> {
     let mut sort_category = SortCategory::CpuPerCore;
     let mut current_interface = "eth0";
     let mut show_info = false;
+    let mut current_disk_index: usize = 0;
     let mut info_area = ratatui::layout::Rect::default();
     let mut net_area = ratatui::layout::Rect::default();
 
+    //custom colors
+    
+   
+    let custom_green = Color::Rgb(100, 149, 107);
+    let custom_yellow = Color::Rgb(138, 136, 46);
 
     let sweep_duration_ms = 300; 
     let switch_interface_at = Instant::now() + Duration::from_millis(sweep_duration_ms);
@@ -91,12 +99,11 @@ fn main() -> io::Result<()> {
                 .direction(Direction::Vertical)
                 .margin(1)
                 .constraints([
-                    Constraint::Length(system.cpus().len() as u16 + 2),
+                    Constraint::Length(system.cpus().len() as u16 + 4),
                     Constraint::Length(3),
                     Constraint::Length(3),
                     Constraint::Length(3),
                     Constraint::Min(5),
-                    Constraint::Length(3),
                 ])
                 .split(area);
 
@@ -111,8 +118,9 @@ fn main() -> io::Result<()> {
             // Draw the bordered block first
             let bordered_block = Block::default()
                 .title(" CPU Usage ")
+                .title_style(Style::default().fg(Color::White)) 
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::LightGreen));
+                .border_style(Style::default().fg(custom_green));
 
             frame.render_widget(&bordered_block, cpu_chunks[0]);
 
@@ -187,15 +195,19 @@ fn main() -> io::Result<()> {
 
             let graph_color = if avg_cpu > 80.0 {
                 Color::Red
-            } else if avg_cpu > 40.0 {
+            } else if avg_cpu > 50.0 {
                 Color::Yellow
-            } else {
+            } else if avg_cpu > 20.0 {
+                Color::LightBlue
+            } 
+            else {
                 Color::White
             };
 
             let graph = Sparkline::default()
                 .block(Block::default()
-                    .title(format!(" CPU Avg Usage (0–100%) - {}ms ", refresh_interval.as_millis()))
+                    .title(format!(" CPU Avg Usage (0–100%) - {}ms | Set Refresh: +/-", refresh_interval.as_millis()))
+                    .title_style(Style::default().fg(Color::White)) 
                     .borders(Borders::ALL))
                 .style(Style::default().fg(graph_color))
                 .data(&avg_history)
@@ -210,6 +222,7 @@ fn main() -> io::Result<()> {
                 ])
                 .split(cpu_chunks[1]);
 
+
             frame.render_widget(graph, right_chunks[0]);
 
             
@@ -221,12 +234,10 @@ fn main() -> io::Result<()> {
 
             let cpu_info_text = format!(
                 "Model:           {}\n\
-                Vendor:          {}\n\
                 Physical Cores:  {}\n\
                 Logical Threads: {}\n\
-                Base Clock Speed:     {} MHz",
+                Base Clock Speed: {} MHz",
                 cpu_info.brand(),
-                cpu_info.vendor_id(),
                 physical_cores,
                 logical_threads,
                 current_speed
@@ -234,7 +245,7 @@ fn main() -> io::Result<()> {
 
             let cpu_info_paragraph = Paragraph::new(cpu_info_text)
                 .style(Style::default().fg(Color::Gray))
-                .block(Block::default().title(" CPU Info ").borders(Borders::ALL));
+                .block(Block::default().title(" CPU Info ").title_style(Style::default().fg(Color::White)).borders(Borders::ALL)).wrap(Wrap { trim: false });
 
             frame.render_widget(cpu_info_paragraph, right_chunks[1]);
 
@@ -244,7 +255,7 @@ fn main() -> io::Result<()> {
             } else if avg_cpu > 50.0 {
                 Color::LightYellow
             } else {
-                Color::LightGreen
+                custom_green
             };
 
             // Find the hardest working core and its top process
@@ -281,12 +292,49 @@ fn main() -> io::Result<()> {
                 .block(
                     Block::default()
                         .title(" CPU Average ")
+                        .title_style(Style::default().fg(Color::White)) 
                         .borders(Borders::ALL)
                         .border_style(Style::default().fg(avg_color)) 
                 );
 
 
-            frame.render_widget(avg_text, layout[1]);
+            let avg_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(70),
+                    Constraint::Percentage(30),
+                ])
+                .split(layout[1]);
+
+            frame.render_widget(avg_text, avg_chunks[0]);
+
+            let disks_list = disks.list();
+
+            let current_disk = disks_list.get(current_disk_index).unwrap_or(&disks_list[0]);
+            let name = current_disk.name().to_string_lossy();
+            
+            let title = format!("Disk: {} | Switch Disk: u/i ", name);
+
+            let disk_block = Block::default()
+                .title(title)
+                .title_style(Style::default().fg(Color::White)) 
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(custom_yellow));
+
+            let usage = current_disk.total_space().saturating_sub(current_disk.available_space()) as f64
+                / current_disk.total_space().max(1) as f64;
+
+            let disk_gauge = Gauge::default()
+                .block(Block::default().borders(Borders::NONE))
+                .gauge_style(Style::default().fg(Color::Green).bg(Color::Black))
+                .ratio(usage)
+                .label(format!("{:.1}%", usage * 100.0));
+            
+            let disk_inner = disk_block.inner(avg_chunks[1]);
+
+            frame.render_widget(disk_block, avg_chunks[1]);
+            frame.render_widget(disk_gauge, disk_inner);
+
 
 
             let used = system.used_memory() as f64 / 1024.0 / 1024.0;
@@ -300,7 +348,7 @@ fn main() -> io::Result<()> {
                 Color::Green
             };
             let gauge = Gauge::default()
-                .block(Block::default().title(" Memory Usage ").borders(Borders::ALL))
+                .block(Block::default().title(" Memory Usage ").title_style(Style::default().fg(Color::White)).borders(Borders::ALL)).set_style(Style::default().fg(custom_yellow))
                 .gauge_style(Style::default().fg(mem_color).bg(Color::Black))
                 .ratio(ratio)
                 .label(format!("{:.2} / {:.2} GB", used / 1024.0, total / 1024.0));
@@ -338,7 +386,7 @@ fn main() -> io::Result<()> {
                 session_mib
             ))
             .style(Style::default().fg(Color::White))
-            .block(Block::default().title(" Network Usage ").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)) );
+            .block(Block::default().title(" Network Usage | Switch: b/n ").title_style(Style::default().fg(Color::White)).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)) );
             net_area = layout[3];
             frame.render_widget(net_text, layout[3]);
 
@@ -361,7 +409,7 @@ fn main() -> io::Result<()> {
             let mut rows: Vec<Row> = processes
                 .iter()
                 .skip(selected_process)
-                .take(20)
+                .take((layout[4].height.saturating_sub(3)) as usize)
                 .enumerate()
                 .map(|(i, proc)| {
                     let name = proc.name();
@@ -412,18 +460,18 @@ fn main() -> io::Result<()> {
                 SortCategory::CpuAverage => "CPU (average %)",
                 SortCategory::Memory => "Memory Usage",
                 SortCategory::Network => "Network Usage",
-            }))).borders(Borders::ALL));
+            }))).title_style(Style::default().fg(Color::White)).borders(Borders::ALL));
             info_area = layout[4];
             frame.render_widget(table, layout[4]);
 
-            let legend = Paragraph::new(
+            /*let legend = Paragraph::new(
                 "↑/↓: Scroll  |  PgUp/PgDn: Jump  |  Home: Top  |  ←/→: Sort  |  b/n: Net IF  |  +/-: Change Refresh | q: Quit"
             )
             .style(Style::default().fg(Color::Gray))
             .block(Block::default().title(" Controls ").borders(Borders::ALL));
             frame.render_widget(legend, layout[5]);
 
-            effects.process_effects(Duration::from_millis(16).into(), frame.buffer_mut(), area);
+            effects.process_effects(Duration::from_millis(16).into(), frame.buffer_mut(), area);*/
         })?;
 
         if event::poll(Duration::from_millis(16))? {
@@ -537,7 +585,21 @@ fn main() -> io::Result<()> {
                                 .status();
                         }
                     }
+
+                    
                     // effects.add_effect(fx::dissolve((100, tachyonfx::Interpolation::Linear)));
+                    KeyCode::Char('u') => {
+                        if current_disk_index > 0 {
+                            current_disk_index -= 1;
+                        }
+                    }
+                    KeyCode::Char('i') => {
+                        if current_disk_index + 1 < disks.list().len() {
+                            current_disk_index += 1;
+                        }
+                    }
+
+
                     KeyCode::Char('k') => {
                         let mut processes: Vec<_> = system.processes().values().collect();
                         if let Some(proc) = processes.get(selected_process) {

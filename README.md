@@ -1,10 +1,10 @@
-# 🧠 b-top (bad-top)
+# b-top (bad-top)
 
 **b-top** (short for **bad-top**) is a terminal-based, Rust-powered system resource viewer for UNIX-like systems. Inspired by tools like `bashtop` and `htop`, `b-top` provides a visually rich and interactive interface for monitoring CPU, memory, network, and process activity, rendered with smooth animations and intuitive controls.
 
 ---
 
-## 🚀 Features
+## Features
 
 - **Per-Core CPU Usage**: Real-time usage display for each CPU core with color-coded indicators.
 - **CPU Usage Graph**: Sparkline graph showing historical average CPU usage.
@@ -17,7 +17,7 @@
 
 ---
 
-## 🛠️ Built With
+## Built With
 
 - Rust
 - ratatui – Terminal UI rendering
@@ -27,7 +27,7 @@
 
 ---
 
-## 🎮 Controls
+## Controls
 
 | Key             | Action                          |
 |----------------|----------------------------------|
@@ -41,7 +41,7 @@
 | `k`            | Kill selected process            |
 ---
 
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 
@@ -67,7 +67,7 @@ sudo mv b-top /usr/local/bin/
 
 ---
 
-## 🧪 TODO / Roadmap
+## TODO / Roadmap
 
 - [ ] Add disk I/O monitoring
 - [ ] Support for more network interfaces
@@ -76,7 +76,7 @@ sudo mv b-top /usr/local/bin/
 
 ---
 
-## 📜 License
+## License
 
 MIT License
 

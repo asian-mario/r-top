@@ -7,7 +7,7 @@ use crate::block::Title;
 use libc::{kill, SIGKILL};
 
 
-const HISTORY_LEN: usize = 50;
+const HISTORY_LEN: usize = 64;
 static mut SESSION_TOTAL_BYTES: u64 = 0;
 static mut PREV_RX: u64 = 0;
 static mut PREV_TX: u64 = 0;
@@ -142,10 +142,10 @@ fn main() -> io::Result<()> {
         terminal.draw(|frame| {
             let full_area = frame.area(); 
             
-            frame.render_widget(
+            /*frame.render_widget(
                 Block::default().style(Style::default().bg(Color::Black)), // or any color
                 full_area,
-            );
+            );*/
 
             let area = frame.area();
             let layout = Layout::default()
@@ -205,7 +205,7 @@ fn main() -> io::Result<()> {
                     let ratio = (usage / 100.0).max(0.01); // Ensure at least a tiny bar
 
                     let color = if usage < 50.0 {
-                        Color::Rgb((119.0 * (usage / 50.0)) as u8, 221, 119)
+                        Color::Rgb((126.0 * (usage / 50.0)) as u8, 207, 126)
                     } else {
                         Color::Rgb(255, (255.0 * ((100.0 - usage) / 50.0)) as u8, 0)
                     };
@@ -224,7 +224,7 @@ fn main() -> io::Result<()> {
                     frame.render_widget(label, label_area);
 
                     let gauge = Gauge::default()
-                        .gauge_style(Style::default().fg(color).bg(Color::Black))
+                        .gauge_style(Style::default().fg(color))
                         .ratio(ratio as f64)
                         .label(format!("{:>5.1}%", usage));
                     frame.render_widget(gauge, bar_area);
@@ -270,8 +270,8 @@ fn main() -> io::Result<()> {
             let right_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Percentage(50),
-                    Constraint::Percentage(50),
+                    Constraint::Percentage(70),
+                    Constraint::Percentage(30),
                 ])
                 .split(cpu_chunks[1]);
 
@@ -286,7 +286,7 @@ fn main() -> io::Result<()> {
             let current_speed = cpu_info.frequency();
 
             let cpu_info_text = format!(
-                "Model:           {}\n\
+                "Model: {}\n\
                 Physical Cores:  {}\n\
                 Logical Threads: {}\n\
                 Base Clock Speed: {} MHz",

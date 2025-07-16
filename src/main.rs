@@ -51,17 +51,22 @@ fn main() -> io::Result<()> {
     let mut current_interface = "eth0";
     let mut show_info = false;
     let mut current_disk_index: usize = 0;
+
+    //animated areas
     let mut info_area = ratatui::layout::Rect::default();
     let mut net_area = ratatui::layout::Rect::default();
+    let mut disk_area = ratatui::layout::Rect::default();
 
     //custom colors
-    
-   
     let custom_green = Color::Rgb(100, 149, 107);
     let custom_yellow = Color::Rgb(138, 136, 46);
 
     let sweep_duration_ms = 300; 
     let switch_interface_at = Instant::now() + Duration::from_millis(sweep_duration_ms);
+    let mut scroll_offset: usize = 0;
+    let mut visible_rows: usize = 0;
+
+
     Duration::from_millis(sweep_duration_ms);
 
     loop {
@@ -87,6 +92,23 @@ fn main() -> io::Result<()> {
                 }
                 buf.push_back(cpu.cpu_usage());
             }
+        }
+
+        let num_cores = system.cpus().len() as f32;
+        let mut processes: Vec<_> = system.processes().values().collect();
+
+        match sort_category {
+            SortCategory::CpuPerCore | SortCategory::CpuAverage => {
+                processes.sort_by(|a, b| {
+                    let a_usage = a.cpu_usage() / num_cores;
+                    let b_usage = b.cpu_usage() / num_cores;
+                    b_usage.partial_cmp(&a_usage).unwrap()
+                });
+            }
+            SortCategory::Memory => {
+                processes.sort_by(|a, b| b.memory().cmp(&a.memory()));
+            }
+            SortCategory::Network => {}
         }
 
         let avg_cpu: f32 = system.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / system.cpus().len() as f32;
@@ -206,7 +228,7 @@ fn main() -> io::Result<()> {
 
             let graph = Sparkline::default()
                 .block(Block::default()
-                    .title(format!(" CPU Avg Usage (0–100%) - {}ms | Set Refresh: +/-", refresh_interval.as_millis()))
+                    .title(format!(" CPU Avg Usage (0–100%) - {}ms | Set Refresh: +/- ", refresh_interval.as_millis()))
                     .title_style(Style::default().fg(Color::White)) 
                     .borders(Borders::ALL))
                 .style(Style::default().fg(graph_color))
@@ -331,7 +353,8 @@ fn main() -> io::Result<()> {
                 .label(format!("{:.1}%", usage * 100.0));
             
             let disk_inner = disk_block.inner(avg_chunks[1]);
-
+            
+            disk_area = avg_chunks[1];
             frame.render_widget(disk_block, avg_chunks[1]);
             frame.render_widget(disk_gauge, disk_inner);
 
@@ -390,30 +413,16 @@ fn main() -> io::Result<()> {
             net_area = layout[3];
             frame.render_widget(net_text, layout[3]);
 
-            let num_cores    = system.cpus().len() as f32;
-            let mut processes: Vec<_> = system.processes().values().collect();
-            match sort_category {
-                SortCategory::CpuPerCore | SortCategory::CpuAverage => {
-                    processes.sort_by(|a, b| {
-                        let a_usage = a.cpu_usage() / num_cores;
-                        let b_usage = b.cpu_usage() / num_cores;
-                        b_usage.partial_cmp(&a_usage).unwrap()
-                    });
-                }
-                SortCategory::Memory => {
-                    processes.sort_by(|a, b| b.memory().cmp(&a.memory()));
-                }
-                SortCategory::Network => {}
-            }
+            visible_rows = layout[4].height.saturating_sub(3) as usize;
 
             let mut rows: Vec<Row> = processes
                 .iter()
-                .skip(selected_process)
-                .take((layout[4].height.saturating_sub(3)) as usize)
+                .skip(scroll_offset)
+                .take(visible_rows)
                 .enumerate()
                 .map(|(i, proc)| {
-                    let name = proc.name();
-                    let name_str = name.to_string_lossy().to_string();
+                    let actual_index = scroll_offset + i;
+                    let name_str = proc.name().to_string_lossy().to_string();
                     let usage = proc.cpu_usage() / num_cores;
                     let color = if usage > 50.0 {
                         Color::Red
@@ -428,39 +437,59 @@ fn main() -> io::Result<()> {
                         format!("{:.2}%", usage),
                         format!("{:.2} MB", proc.memory() as f64 / 1024.0 / 1024.0),
                     ])
-                    .style(Style::default().fg(if i == 0 { Color::LightCyan } else { color }))
+                    .style(Style::default().fg(if actual_index == selected_process {
+                        Color::LightCyan
+                    } else {
+                        color
+                    }))
                 })
                 .collect();
 
             if show_info {
                 if let Some(proc) = processes.get(selected_process) {
-                    rows.insert(1, Row::new(vec![
-                        format!("{}", proc.pid()),
-                        format!("{:?}", proc.name()),
-                        format!("Core: {}", proc.cpu_usage() as usize % system.cpus().len()),
-                        format!("Status: {:?}", proc.status()),
-                    ]).style(Style::default().fg(Color::Cyan)));
+                    let insert_index = selected_process.saturating_sub(scroll_offset);
+                    if insert_index < rows.len() {                  
+                        let args = proc.cmd()
+                            .iter()
+                            .map(|s| s.to_string_lossy())
+                            .collect::<Vec<_>>()
+                            .join(" ");
 
+                        let thread_count = proc.tasks().map_or(0, |tasks| tasks.len());
+                        rows.insert(insert_index + 1, Row::new(vec![
+                            format!("Args: {:?}", args),
+                            format!("Threads: {}", thread_count),
+                            format!("Core: {}", proc.cpu_usage() as usize % system.cpus().len()),
+                            format!("Status: {:?}", proc.status()),
+                        ]).style(Style::default().fg(Color::Cyan)));
+                    }
                 }
             }
+
 
             let header = Row::new(vec!["PID", "Name", "CPU", "Memory"])
                 .style(Style::default().fg(Color::Gray));
 
             let table = Table::new(rows, &[
-                Constraint::Length(8),
                 Constraint::Percentage(50),
+                Constraint::Percentage(30),
                 Constraint::Length(10),
                 Constraint::Length(20),
             ])
             .header(header)
             .style(Style::default().fg(Color::LightCyan))
-            .block(Block::default().title(Title::from(format!(" Top Processes - Enter: Info | o/p: Nice | k: kill {}", match sort_category {
-                SortCategory::CpuPerCore => "CPU (per Core %)",
-                SortCategory::CpuAverage => "CPU (average %)",
-                SortCategory::Memory => "Memory Usage",
-                SortCategory::Network => "Network Usage",
-            }))).title_style(Style::default().fg(Color::White)).borders(Borders::ALL));
+            .block(Block::default().title(Title::from(format!(
+                " Top Processes - Enter: Info | o/p: Nice | k: kill | {}",
+                match sort_category {
+                    SortCategory::CpuPerCore => "CPU (per Core %)",
+                    SortCategory::CpuAverage => "CPU (average %)",
+                    SortCategory::Memory => "Memory Usage",
+                    SortCategory::Network => "Network Usage",
+                }
+            )))
+            .title_style(Style::default().fg(Color::White))
+            .borders(Borders::ALL));
+
             info_area = layout[4];
             frame.render_widget(table, layout[4]);
 
@@ -469,20 +498,44 @@ fn main() -> io::Result<()> {
             )
             .style(Style::default().fg(Color::Gray))
             .block(Block::default().title(" Controls ").borders(Borders::ALL));
-            frame.render_widget(legend, layout[5]);
+            frame.render_widget(legend, layout[5]);*/
 
-            effects.process_effects(Duration::from_millis(16).into(), frame.buffer_mut(), area);*/
+            effects.process_effects(Duration::from_millis(16).into(), frame.buffer_mut(), area);
         })?;
 
         if event::poll(Duration::from_millis(16))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Char('q') => break,
-                    KeyCode::Down => selected_process += 1,
-                    KeyCode::Up => selected_process = selected_process.saturating_sub(1),
-                    KeyCode::PageDown => selected_process += 5,
-                    KeyCode::PageUp => selected_process = selected_process.saturating_sub(5),
-                    KeyCode::Home => selected_process = 0,
+
+                    KeyCode::Down => {
+                        if selected_process + 1 < processes.len() {
+                            selected_process += 1;
+                            if selected_process >= scroll_offset + visible_rows {
+                                scroll_offset += 1;
+                            }
+                        }
+                    }
+                    KeyCode::Up => {
+                        if selected_process > 0 {
+                            selected_process -= 1;
+                            if selected_process < scroll_offset {
+                                scroll_offset = scroll_offset.saturating_sub(1);
+                            }
+                        }
+                    }
+                    KeyCode::PageDown => {
+                        selected_process = (selected_process + visible_rows).min(processes.len().saturating_sub(1));
+                        scroll_offset = (scroll_offset + visible_rows).min(processes.len().saturating_sub(visible_rows));
+                    }
+                    KeyCode::PageUp => {
+                        selected_process = selected_process.saturating_sub(visible_rows);
+                        scroll_offset = scroll_offset.saturating_sub(visible_rows);
+                    }
+                    KeyCode::Home => {
+                        selected_process = 0;
+                        scroll_offset = 0;
+                    }
                     KeyCode::Left => {
                         sort_category = match sort_category {
                             SortCategory::CpuPerCore => SortCategory::Network,
@@ -499,6 +552,7 @@ fn main() -> io::Result<()> {
                             SortCategory::Network => SortCategory::CpuPerCore,
                         };
                     }
+
                     KeyCode::Char('b') => {
                         let color = Color::from_u32(0x1E1E1E);
                         let timer = (200, Interpolation::QuintInOut);
@@ -585,21 +639,39 @@ fn main() -> io::Result<()> {
                                 .status();
                         }
                     }
-
-                    
-                    // effects.add_effect(fx::dissolve((100, tachyonfx::Interpolation::Linear)));
+                     // effects.add_effect(fx::dissolve((100, tachyonfx::Interpolation::Linear)));
                     KeyCode::Char('u') => {
+                        let color = Color::from_u32(0x1E1E1E);
+                        let timer = (200, Interpolation::QuintInOut);
+                         effects.add_effect(
+                            fx::sweep_in(
+                                Motion::LeftToRight,
+                                20,
+                                10,
+                                color,
+                                timer,
+                            ).with_area(disk_area)
+                        );
                         if current_disk_index > 0 {
                             current_disk_index -= 1;
                         }
                     }
                     KeyCode::Char('i') => {
+                        let color = Color::from_u32(0x1E1E1E);
+                        let timer = (200, Interpolation::QuintInOut);
+                         effects.add_effect(
+                            fx::sweep_in(
+                                Motion::LeftToRight,
+                                20,
+                                10,
+                                color,
+                                timer,
+                            ).with_area(disk_area)
+                        );
                         if current_disk_index + 1 < disks.list().len() {
                             current_disk_index += 1;
                         }
                     }
-
-
                     KeyCode::Char('k') => {
                         let mut processes: Vec<_> = system.processes().values().collect();
                         if let Some(proc) = processes.get(selected_process) {
@@ -615,9 +687,6 @@ fn main() -> io::Result<()> {
 
                         }
                     }
-
-
-
                     KeyCode::Char('+') => {
                         let new_ms = (refresh_interval.as_millis() + 100).min(10000);
                         refresh_interval = Duration::from_millis(new_ms as u64);

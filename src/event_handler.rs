@@ -48,6 +48,8 @@ pub fn handle_key_event(
         }
         KeyCode::Left => {
             app_state.cycle_sort_left();
+            app_state.process_cache.invalidate();
+            app_state.process_cache.invalidate();
         }
         KeyCode::Right => {
             app_state.cycle_sort_right();

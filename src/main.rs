@@ -17,6 +17,16 @@ use system_info::*;
 use app_state::*;
 use utils::CircularBuffer;
 
+/*
+    please refrain from taking any comments that dont have proper punctuation as serious
+    i shitpost a lot because its lonely
+*/
+
+/*
+    MEMORY OPT. LIST:
+    - CPU PROC CACHE
+    - CPU HISTORY CIRC BUFFER
+*/
 fn main() -> io::Result<()> {
     let mut terminal = ratatui::init();
     let mut app_state = AppState::new();
@@ -50,7 +60,7 @@ fn main() -> io::Result<()> {
         }
 
         update_cpu_history(&mut cpu_history, &system);
-        let processes = sort_processes(&system, &app_state.sort_category);
+        let processes = sort_processes_cached(&system, &app_state.sort_category, &mut app_state.process_cache);
 
         terminal.draw(|frame| {
             render_ui(frame, &system, &networks, &disks, &processes, &cpu_history, &mut app_state);

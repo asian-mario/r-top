@@ -3,6 +3,7 @@ use ratatui::layout::Rect;
 use tachyonfx::EffectManager;
 use crate::types::SortCategory;
 use crate::constants::SWEEP_DURATION_MS;
+use crate::system_info::ProcessCache;
 
 pub struct AppState {
     pub effects: EffectManager<()>,
@@ -15,6 +16,9 @@ pub struct AppState {
     pub scroll_offset: usize,
     pub visible_rows: usize,
     pub switch_interface_at: Instant,
+
+    // Cache
+    pub process_cache: ProcessCache,
     
     // Animated areas
     pub info_area: Rect,
@@ -38,6 +42,7 @@ impl AppState {
             scroll_offset: 0,
             visible_rows: 0,
             switch_interface_at: Instant::now() + Duration::from_millis(SWEEP_DURATION_MS),
+            process_cache: ProcessCache::new(),
             info_area: Rect::default(),
             net_area: Rect::default(),
             disk_area: Rect::default(),

@@ -22,6 +22,14 @@ pub struct CircularBuffer<T> {
     size: usize,
 }
 
+/*
+    i think somehow this uses more memory LMAO
+    but okay ill do checks later in release mode and note them here
+
+    Vec:
+
+    CircBuffer:
+*/
 impl<T: Copy + Default> CircularBuffer<T> {
     pub fn new(capacity: usize) -> Self {
         Self {

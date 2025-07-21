@@ -10,7 +10,7 @@ use crate::constants::{ANIMATION_COLOR, ANIMATION_TIMER_MS};
 pub fn handle_key_event(
     key: KeyEvent,
     app_state: &mut AppState,
-    system: &System,
+    system: &System, //-> yes i know its not used since we already have appstate, but i'm using this as a fallback incase I need to make some quick tests
     processes: &Vec<&Process>
 ) -> io::Result<bool> {
     match key.code {

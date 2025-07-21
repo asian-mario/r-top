@@ -89,4 +89,7 @@ impl AppState {
         let new_ms = self.refresh_interval.as_millis().saturating_sub(100).max(100);
         self.refresh_interval = Duration::from_millis(new_ms as u64);
     }
+    /*
+        all fine?
+     */
 }

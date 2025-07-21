@@ -27,6 +27,10 @@ pub fn render_ui(
             Constraint::Min(5),
         ])
         .split(area);
+    /*
+        lalala this is stupid!
+        i *really* need to make this more dynamic
+     */
 
     render_cpu_section(frame, system, cpu_history, app_state, layout[0]);
     render_cpu_average(frame, system, disks, app_state, layout[1]);
@@ -49,6 +53,11 @@ fn render_cpu_section(
     app_state: &AppState,
     area: Rect,
 ) {
+    /*
+    FOR SOME REASON! before the refactor 70/30 was FINE! it displayed all the things in CPU info but now its not?? I don't want to tweak this b.s again because
+    i'm essentially choosing do I want a graph that actually has some meaning to it or cpu info
+    -> also the monitor im working with is pretty buns so it'll look better on other monitors
+     */
     let cpu_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
@@ -339,7 +348,11 @@ fn render_processes(
 ) {
     let num_cores = system.cpus().len() as f32;
     app_state.visible_rows = area.height.saturating_sub(3) as usize;
-
+    /*
+        i should really keep a cache of the processes list instead of recreated the vec everyframe. very bad
+        TODO:
+        cache proc list
+     */
     let mut rows: Vec<Row> = processes
         .iter()
         .skip(app_state.scroll_offset)
@@ -413,6 +426,10 @@ fn render_processes(
     .style(Style::default().fg(Color::LightCyan))
     .block(
         Block::default()
+        /*
+            i have to check if Nice even works, its been a while.
+            -> WORKS!
+         */
             .title(format!(
                 " Top Processes - Enter: Info | o/p: Nice | k: kill | {}",
                 app_state.sort_category.as_str()

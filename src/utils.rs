@@ -9,3 +9,7 @@ pub fn format_bytes(bytes: u64) -> String {
         format!("{} B", bytes)
     }
 }
+
+/*
+    my cs lecturer should have failed me by the number of times i had to rethink of 1024.0/1024.0 was to calculate MiB
+*/

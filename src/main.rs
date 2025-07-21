@@ -1,7 +1,5 @@
 use std::{collections::VecDeque, io, time::{Duration, Instant}};
-use ratatui::{prelude::*, style::Styled, symbols::bar::Set, widgets::*};
-use crossterm::event::{self, Event, KeyCode};
-use tachyonfx::{fx, EffectManager, Motion, Interpolation};
+use crossterm::event::{self, Event};
 use sysinfo::{System, RefreshKind, Networks, Disks};
 
 mod constants;
@@ -13,8 +11,6 @@ mod system_info;
 mod app_state;
 
 use constants::*;
-use types::*;
-use utils::*;
 use ui::*;
 use event_handler::*;
 use system_info::*;
@@ -30,11 +26,21 @@ fn main() -> io::Result<()> {
     let mut disks = Disks::new_with_refreshed_list();
 
     let mut cpu_history: Vec<VecDeque<f32>> = vec![];
+    /*
+        terrible for memory, TODO: will need to make this more memory efficient ->
+        either limit history per core OR circular buffer
+     */
     let mut last_refresh = Instant::now();
 
     loop {
         let now = Instant::now();
         if now.duration_since(last_refresh) >= app_state.refresh_interval {
+            /*
+                a bit shit to refresh_all
+
+                nevermind:
+                forgot it only does cpu, proc, mem -> completely o.k
+             */
             system.refresh_all();
             networks.refresh(false);
             disks.refresh(false);

@@ -5,7 +5,11 @@ pub enum SortCategory {
     Memory,
     Network,
 }
-
+/*
+FURTHER:
+    add disk i/o usage
+    pot. add GPU usage as well but that also means I have to call GPU refreshes and add it in. lazy, but i'll see.
+*/
 impl SortCategory {
     pub fn previous(&self) -> Self {
         match self {

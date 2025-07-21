@@ -44,11 +44,9 @@ pub struct CircularBuffer<T> {
     often while using the Vec method kept a consistent 0.53%~
     will continue testing but it looks okay to merge for now
 
-    Further testing, same params
+    caching made it worse for memory of course, just by a tad.
 
-    Vec:
-
-    CircBuffer + Row Caching:
+    just merge this stupid branch, adding rows caching increased the cpu usage by 1.7% and memory by 2.47% but it seems to be the better approach here.
 */
 impl<T: Copy + Default> CircularBuffer<T> {
     pub fn new(capacity: usize) -> Self {

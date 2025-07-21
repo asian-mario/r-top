@@ -49,6 +49,7 @@ fn main() -> io::Result<()> {
             system.refresh_all();
             networks.refresh(false);
             disks.refresh(false);
+            app_state.invalidate_rows_cache();
             last_refresh = now;
         }
 

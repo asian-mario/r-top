@@ -69,7 +69,7 @@ impl AppState {
         }
     }
 
-    //invalidate row cache when needed
+    //invalidate row cache when needed -> PLEASE call this anytime you do something with processes, or else it has to wait for an action to invaludate rows cache and makes it jank
     pub fn invalidate_rows_cache(&mut self) {
         self.rows_cache_valid = false;
     }

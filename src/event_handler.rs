@@ -76,8 +76,8 @@ pub fn handle_key_event(
             app_state.effects.add_effect(
                 fx::sweep_in(motion, 20, 10, color, timer).with_area(app_state.info_area)
             );
-            
             app_state.toggle_info();
+            app_state.invalidate_rows_cache();
         }
 
         KeyCode::Char('o') => {

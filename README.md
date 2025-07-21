@@ -70,7 +70,7 @@ sudo mv b-top /usr/local/bin/
 
 ## TODO / Roadmap
 
-- [ ] Add disk I/O monitoring
+- [x] Add disk I/O monitoring
 - [ ] Support for more network interfaces
 - [x] Configurable refresh rate
 - [ ] Add resource management featres
@@ -88,8 +88,3 @@ MIT License
 Thanks to `ratatui` and `TachyonFX` repositories for maintaining their projects for for the UI animations.
 
 ---
-
-## Why "bad-top"?
-
-Because it's my first Rust project and it's undeniably terrible.
-

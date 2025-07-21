@@ -25,10 +25,27 @@ pub struct CircularBuffer<T> {
 /*
     i think somehow this uses more memory LMAO
     but okay ill do checks later in release mode and note them here
+    PARAMS: 2000ms refresh -> not opening or closing any processes -> switching prioritizations 
+    -> test thrice
 
     Vec:
+        0.53% cpu avg.
+        0.7% cpu 1% highs
+        6.50mb usage
 
     CircBuffer:
+        0.48%  cpu avg.
+        0.56% cpu 1% highs
+        5.12mb usage
+
+    Summary:
+        memory diff: -21.23%
+        cpu avg diff: -9.43%
+        cpu 1% highs diff: -20.0%
+
+    i mean, was it really worth it? kind of. seems through testing that sometimes the new impl. does lead to the occasional rise of cpu usage but often tanks way down to 0.4x% every so
+    often while using the Vec method kept a consistent 0.53%~
+    will continue testing but it looks okay to merge for now
 */
 impl<T: Copy + Default> CircularBuffer<T> {
     pub fn new(capacity: usize) -> Self {

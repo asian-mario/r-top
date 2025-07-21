@@ -36,7 +36,7 @@ pub fn render_ui(
     render_cpu_average(frame, system, disks, app_state, layout[1]);
     render_memory(frame, system, layout[2]);
     render_network(frame, networks, app_state, layout[3]);
-    render_processes(frame, system, processes, app_state, layout[4]);
+    render_processes_optimized(frame, system, processes, app_state, layout[4]);
 
     // Process effects
     app_state.effects.process_effects(
@@ -339,6 +339,131 @@ fn render_network(
     frame.render_widget(net_text, area);
 }
 
+fn render_processes_optimized(
+    frame: &mut ratatui::Frame,
+    system: &System,
+    processes: &Vec<&Process>,
+    app_state: &mut AppState,
+    area: Rect,
+) {
+    let num_cores = system.cpus().len() as f32;
+    app_state.visible_rows = area.height.saturating_sub(3) as usize;
+    
+    let current_process_count = processes.len();
+    
+    // Check if we need to rebuild the row cache
+    let needs_rebuild = !app_state.rows_cache_valid
+        || app_state.last_process_count != current_process_count
+        || app_state.last_scroll_offset != app_state.scroll_offset
+        || app_state.last_selected_process != app_state.selected_process;
+
+    if needs_rebuild {
+        // Clear and rebuild cache
+        app_state.cached_rows.clear();
+        
+        // Pre-allocate if needed
+        if app_state.cached_rows.capacity() < app_state.visible_rows {
+            app_state.cached_rows.reserve(app_state.visible_rows);
+        }
+        
+        // Create rows only for visible processes
+        for (i, proc) in processes
+            .iter()
+            .skip(app_state.scroll_offset)
+            .take(app_state.visible_rows)
+            .enumerate()
+        {
+            let actual_index = app_state.scroll_offset + i;
+            let name_str = proc.name().to_string_lossy().into_owned(); // Convert to owned String
+            let usage = proc.cpu_usage() / num_cores;
+            
+            let color = if usage > 50.0 {
+                Color::Red
+            } else if usage > 20.0 {
+                Color::Yellow
+            } else {
+                Color::White
+            };
+
+            // Use format! with owned strings to create 'static lifetime
+            let row = Row::new(vec![
+                proc.pid().to_string(),
+                name_str,
+                format!("{:.2}%", usage),
+                format!("{:.2} MB", proc.memory() as f64 / 1024.0 / 1024.0),
+            ])
+            .style(Style::default().fg(if actual_index == app_state.selected_process {
+                Color::LightCyan
+            } else {
+                color
+            }));
+
+            app_state.cached_rows.push(row);
+        }
+
+        // Handle info insertion if needed
+        if app_state.show_info {
+            if let Some(proc) = processes.get(app_state.selected_process) {
+                let insert_index = app_state.selected_process.saturating_sub(app_state.scroll_offset);
+                if insert_index < app_state.cached_rows.len() {
+                    let args = proc
+                        .cmd()
+                        .iter()
+                        .map(|s| s.to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+
+                    let thread_count = proc.tasks().map_or(0, |tasks| tasks.len());
+                    
+                    let info_row = Row::new(vec![
+                        format!("Args: {:?}", args),
+                        format!("Threads: {}", thread_count),
+                        format!("Core: {}", proc.cpu_usage() as usize % system.cpus().len()),
+                        format!("Status: {:?}", proc.status()),
+                    ])
+                    .style(Style::default().fg(Color::Cyan));
+                    
+                    app_state.cached_rows.insert(insert_index + 1, info_row);
+                }
+            }
+        }
+
+        // Update cache validity markers
+        app_state.last_process_count = current_process_count;
+        app_state.last_scroll_offset = app_state.scroll_offset;
+        app_state.last_selected_process = app_state.selected_process;
+        app_state.rows_cache_valid = true;
+    }
+
+    let header = Row::new(vec!["PID", "Name", "CPU", "Memory"])
+        .style(Style::default().fg(Color::Gray));
+
+    let table = Table::new(
+        app_state.cached_rows.clone(), // Clone the cached rows instead of rebuilding
+        &[
+            Constraint::Percentage(50),
+            Constraint::Percentage(30),
+            Constraint::Length(10),
+            Constraint::Length(20),
+        ],
+    )
+    .header(header)
+    .style(Style::default().fg(Color::LightCyan))
+    .block(
+        Block::default()
+            .title(format!(
+                " Top Processes - Enter: Info | o/p: Nice | k: kill | {}",
+                app_state.sort_category.as_str()
+            ))
+            .title_style(Style::default().fg(Color::White))
+            .borders(Borders::ALL),
+    );
+
+    app_state.info_area = area;
+    frame.render_widget(table, area);
+}
+
+#[deprecated(note = "deprecated! use render_processes_optimized() instead!")]
 fn render_processes(
     frame: &mut ratatui::Frame,
     system: &System,

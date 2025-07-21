@@ -10,9 +10,6 @@ pub fn format_bytes(bytes: u64) -> String {
     }
 }
 
-/*
-    my cs lecturer should have failed me by the number of times i had to rethink of 1024.0/1024.0 was to calculate MiB
-*/
 
 // circular bufer for CPU history
 pub struct CircularBuffer<T> {
@@ -46,6 +43,12 @@ pub struct CircularBuffer<T> {
     i mean, was it really worth it? kind of. seems through testing that sometimes the new impl. does lead to the occasional rise of cpu usage but often tanks way down to 0.4x% every so
     often while using the Vec method kept a consistent 0.53%~
     will continue testing but it looks okay to merge for now
+
+    Further testing, same params
+
+    Vec:
+
+    CircBuffer + Row Caching:
 */
 impl<T: Copy + Default> CircularBuffer<T> {
     pub fn new(capacity: usize) -> Self {

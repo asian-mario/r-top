@@ -123,7 +123,7 @@ fn render_cpu_section(
     // Draw CPU graph and info
     let right_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(cpu_chunks[1]);
 
     let avg_history = calculate_avg_cpu_history(cpu_history);

@@ -39,6 +39,7 @@
 | `q`            | Quit the application             |
 | `ENTER`        | View more process info           |
 | `k`            | Kill selected process            |
+| `u / i`        | Switch between disks             |
 ---
 
 ## Installation

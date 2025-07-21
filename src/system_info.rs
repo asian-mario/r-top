@@ -1,15 +1,12 @@
-use std::collections::VecDeque;
 use sysinfo::{System, Process};
 use crate::types::SortCategory;
 use crate::constants::HISTORY_LEN;
+use crate::utils::CircularBuffer;
 
-pub fn update_cpu_history(cpu_history: &mut Vec<VecDeque<f32>>, system: &System) {
+pub fn update_cpu_history(cpu_history: &mut Vec<CircularBuffer<f32>>, system: &System) {
     for (i, cpu) in system.cpus().iter().enumerate() {
-        if let Some(buf) = cpu_history.get_mut(i) {
-            if buf.len() >= HISTORY_LEN {
-                buf.pop_front();
-            }
-            buf.push_back(cpu.cpu_usage());
+        if let Some(buffer) = cpu_history.get_mut(i) {
+            buffer.push(cpu.cpu_usage());
         }
     }
 }
@@ -35,14 +32,24 @@ pub fn sort_processes<'a>(system: &'a System, sort_category: &SortCategory) -> V
     processes
 }
 
-pub fn calculate_avg_cpu_history(cpu_history: &Vec<VecDeque<f32>>) -> Vec<u64> {
-    (0..HISTORY_LEN)
+pub fn calculate_avg_cpu_history(cpu_history: &Vec<CircularBuffer<f32>>) -> Vec<u64> {
+    if cpu_history.is_empty() {
+        return vec![0; HISTORY_LEN];
+    }
+
+    let max_len = cpu_history.iter().map(|buf| buf.len()).max().unwrap_or(0);
+    
+    (0..max_len)
         .map(|i| {
             let sum: f32 = cpu_history
                 .iter()
-                .filter_map(|core| core.get(i))
+                .filter_map(|buffer| buffer.get(i))
                 .sum();
-            let count = cpu_history.iter().filter(|core| core.get(i).is_some()).count();
+            let count = cpu_history
+                .iter()
+                .filter(|buffer| buffer.get(i).is_some())
+                .count();
+            
             if count > 0 {
                 (sum / count as f32) as u64
             } else {

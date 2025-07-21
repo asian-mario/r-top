@@ -1,8 +1,8 @@
-use std::{collections::VecDeque, time::Duration};
+use std::{time::Duration};
 use ratatui::{prelude::*, symbols::bar::Set, widgets::*, style::*};
 use sysinfo::{System, Networks, Disks, Process};
 use crate::constants::*;
-use crate::utils::format_bytes;
+use crate::utils::{format_bytes, CircularBuffer};
 use crate::app_state::AppState;
 use crate::system_info::{calculate_avg_cpu_history, get_busiest_core_info};
 
@@ -12,7 +12,7 @@ pub fn render_ui(
     networks: &Networks,
     disks: &Disks,
     processes: &Vec<&Process>,
-    cpu_history: &Vec<VecDeque<f32>>,
+    cpu_history: &Vec<CircularBuffer<f32>>,
     app_state: &mut AppState,
 ) {
     let area = frame.area();
@@ -49,7 +49,7 @@ pub fn render_ui(
 fn render_cpu_section(
     frame: &mut ratatui::Frame,
     system: &System,
-    cpu_history: &Vec<VecDeque<f32>>,
+    cpu_history: &Vec<CircularBuffer<f32>>,
     app_state: &AppState,
     area: Rect,
 ) {

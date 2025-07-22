@@ -3,6 +3,7 @@ use crate::types::SortCategory;
 use crate::constants::HISTORY_LEN;
 use crate::utils::CircularBuffer;
 use std::collections::HashMap;
+use std::time::Instant;
 
 // Add this struct to cache sorted processes
 pub struct ProcessCache {

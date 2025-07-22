@@ -6,6 +6,24 @@ use crate::theme::{Theme, ThemeManager};
 use crate::types::SortCategory;
 use crate::constants::SWEEP_DURATION_MS;
 use crate::system_info::ProcessCache;
+use std::collections::VecDeque;
+
+//-> okay ill just place alerts here, even though app_state.rs should just be app_state, i dont think its worth it to make another file
+
+#[derive(Debug, Clone)]
+pub enum AlertLevel {
+    Info,
+    Warning,
+    Critical,
+}
+
+#[derive(Debug, Clone)]
+pub struct Alert {
+    pub message: String,
+    pub level: AlertLevel,
+    pub timestamp: Instant,
+}
+
 
 pub struct AppState {
     pub effects: EffectManager<()>,
@@ -40,6 +58,9 @@ pub struct AppState {
 
     // Theme management
     pub theme_manager: ThemeManager,
+
+    // Alert management
+    pub alerts: VecDeque<Alert>
 }
 
 impl AppState {
@@ -75,8 +96,28 @@ impl AppState {
 
             // Themes
             theme_manager: ThemeManager::new(),
+
+            // Alerts
+            alerts: VecDeque::with_capacity(10),
         }
     }
+    // Alert helper functions
+    pub fn add_alert(&mut self, message: &str, level: AlertLevel){
+        if self.alerts.len() >= 10 {
+            self.alerts.pop_front();
+        }
+        self.alerts.push_back(Alert {
+            message: message.to_string(),
+            level,
+            timestamp: Instant::now(),
+        })
+    }
+
+    pub fn clear_expired_alerts(&mut self) {
+        let now = Instant::now();
+        self.alerts.retain(|alert| now.duration_since(alert.timestamp) < Duration::from_secs(5));
+    }
+
 
     pub fn update_terminal_area(&mut self, area: Rect) {
         self.terminal_area = area;

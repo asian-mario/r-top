@@ -5,6 +5,15 @@ use crate::utils::CircularBuffer;
 use std::collections::HashMap;
 use std::time::Instant;
 
+use lazy_static::lazy_static;
+// me when i lie -> "unused import" like hello what is below me
+
+// Tracking map for alerts
+lazy_static::lazy_static! {
+    static ref CPU_USAGE_TRACKER: std::sync::Mutex<HashMap<Pid, (f32, Instant)>> = Default::default();
+}
+
+
 // Add this struct to cache sorted processes
 pub struct ProcessCache {
     cached_processes: Vec<Pid>,

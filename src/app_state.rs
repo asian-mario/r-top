@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 use ratatui::layout::Rect;
 use ratatui::widgets::Row;
 use tachyonfx::EffectManager;
+use crate::theme::{Theme, ThemeManager};
 use crate::types::SortCategory;
 use crate::constants::SWEEP_DURATION_MS;
 use crate::system_info::ProcessCache;
@@ -35,6 +36,9 @@ pub struct AppState {
     pub info_area: Rect,
     pub net_area: Rect,
     pub disk_area: Rect,
+
+    // Theme management
+    pub theme_manger: ThemeManager,
 }
 
 impl AppState {
@@ -66,6 +70,9 @@ impl AppState {
             info_area: Rect::default(),
             net_area: Rect::default(),
             disk_area: Rect::default(),
+
+            // Themes
+            theme_manger: ThemeManager::new(),
         }
     }
 
@@ -120,7 +127,9 @@ impl AppState {
         let new_ms = self.refresh_interval.as_millis().saturating_sub(100).max(100);
         self.refresh_interval = Duration::from_millis(new_ms as u64);
     }
-    /*
-        all fine?
-     */
+    
+    pub fn switch_theme(&mut self) {
+        self.theme_manger.switch_theme();
+        self.invalidate_rows_cache();
+    }
 }

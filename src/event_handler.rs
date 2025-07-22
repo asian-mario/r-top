@@ -49,6 +49,7 @@ pub fn handle_key_event(
         KeyCode::Left => {
             app_state.cycle_sort_left();
             app_state.process_cache.invalidate();
+            //i should add the process cache invalidation to the cycle_sort_left() func, this is kind of yucky impeding cache management here
         }
         KeyCode::Right => {
             app_state.cycle_sort_right();
@@ -120,6 +121,10 @@ pub fn handle_key_event(
         }
         KeyCode::Char('-') => {
             app_state.decrease_refresh_interval();
+        }
+
+        KeyCode::Char('t') => {
+            app_state.switch_theme();
         }
 
         _ => {}

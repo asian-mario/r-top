@@ -9,6 +9,7 @@ mod ui;
 mod event_handler;
 mod system_info;
 mod app_state;
+mod theme;
 
 use constants::*;
 use ui::*;

@@ -34,7 +34,7 @@ pub fn render_ui(
 
     render_cpu_section(frame, system, cpu_history, app_state, layout[0]);
     render_cpu_average(frame, system, disks, app_state, layout[1]);
-    render_memory(frame, system, layout[2]);
+    render_memory(frame, system, app_state, layout[2]);
     render_network(frame, networks, app_state, layout[3]);
     render_processes_optimized(frame, system, processes, app_state, layout[4]);
 
@@ -53,6 +53,7 @@ fn render_cpu_section(
     app_state: &AppState,
     area: Rect,
 ) {
+    let theme = app_state.theme_manager.current_theme();
     /*
     FOR SOME REASON! before the refactor 70/30 was FINE! it displayed all the things in CPU info but now its not?? I don't want to tweak this b.s again because
     i'm essentially choosing do I want a graph that actually has some meaning to it or cpu info
@@ -66,9 +67,9 @@ fn render_cpu_section(
     // Draw CPU cores
     let bordered_block = Block::default()
         .title(" CPU Usage ")
-        .title_style(Style::default().fg(Color::White))
+        .title_style(Style::default().fg(theme.primary_text))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(CUSTOM_PURPLE));
+        .border_style(Style::default().fg(theme.primary_border));
 
     frame.render_widget(&bordered_block, cpu_chunks[0]);
     let inner_area = bordered_block.inner(cpu_chunks[0]);
@@ -97,10 +98,14 @@ fn render_cpu_section(
             let usage = cpu.cpu_usage();
             let ratio = (usage / 100.0).max(0.01);
 
-            let color = if usage < 50.0 {
-                Color::Rgb((126.0 * (usage / 50.0)) as u8, 207, 126)
+            let color = if usage > 80.0 {
+                theme.cpu_critical
+            } else if usage > 50.0 {
+                theme.cpu_high
+            } else if usage > 20.0 {
+                theme.cpu_medium
             } else {
-                Color::Rgb(255, (255.0 * ((100.0 - usage) / 50.0)) as u8, 0)
+                theme.cpu_low
             };
 
             let split = Layout::default()
@@ -109,7 +114,7 @@ fn render_cpu_section(
                 .split(area);
 
             let label = Paragraph::new(format!("Core {:>2}", i))
-                .style(Style::default().fg(Color::White));
+                .style(Style::default().fg(theme.primary_text));
             frame.render_widget(label, split[0]);
 
             let gauge = Gauge::default()
@@ -130,13 +135,13 @@ fn render_cpu_section(
     let avg_cpu: f32 = system.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / system.cpus().len() as f32;
 
     let graph_color = if avg_cpu > 80.0 {
-        Color::Red
+        theme.cpu_critical
     } else if avg_cpu > 50.0 {
-        Color::Yellow
+        theme.cpu_high
     } else if avg_cpu > 20.0 {
-        Color::LightBlue
+        theme.cpu_medium
     } else {
-        Color::White
+        theme.cpu_low
     };
 
     let graph = Sparkline::default()
@@ -146,7 +151,7 @@ fn render_cpu_section(
                     " CPU Avg Usage (0–100%) - {}ms | Set Refresh: +/- ",
                     app_state.refresh_interval.as_millis()
                 ))
-                .title_style(Style::default().fg(Color::White))
+                .title_style(Style::default().fg(theme.primary_text))
                 .borders(Borders::ALL),
         )
         .style(Style::default().fg(graph_color))
@@ -174,11 +179,11 @@ fn render_cpu_section(
     );
 
     let cpu_info_paragraph = Paragraph::new(cpu_info_text)
-        .style(Style::default().fg(Color::Gray))
+        .style(Style::default().fg(theme.secondary_text))
         .block(
             Block::default()
                 .title(" CPU Info ")
-                .title_style(Style::default().fg(Color::White))
+                .title_style(Style::default().fg(theme.primary_text))
                 .borders(Borders::ALL),
         )
         .wrap(Wrap { trim: false });
@@ -193,15 +198,16 @@ fn render_cpu_average(
     app_state: &mut AppState,
     area: Rect
 ) {
+    let theme = app_state.theme_manager.current_theme();
     let avg_cpu: f32 = system.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / system.cpus().len() as f32;
     let (busiest_core_idx, busiest_core_usage, top_process_name, top_process_pid) = get_busiest_core_info(system);
 
     let avg_color = if avg_cpu > 80.0 {
-        Color::Red
+        theme.cpu_critical
     } else if avg_cpu > 50.0 {
-        Color::LightYellow
+        theme.cpu_high
     } else {
-        CUSTOM_PURPLE
+        theme.primary_border
     };
 
     let left = format!("Average CPU Usage: {:.2}% | ", avg_cpu);
@@ -211,11 +217,11 @@ fn render_cpu_average(
     );
 
     let avg_text = Paragraph::new(format!("{:<10}{}", left, right))
-        .style(Style::default().fg(Color::White))
+        .style(Style::default().fg(theme.primary_text))
         .block(
             Block::default()
                 .title(" CPU Average ")
-                .title_style(Style::default().fg(Color::White))
+                .title_style(Style::default().fg(theme.primary_text))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(avg_color)),
         );
@@ -236,16 +242,16 @@ fn render_cpu_average(
 
     let disk_block = Block::default()
         .title(title)
-        .title_style(Style::default().fg(Color::White))
+        .title_style(Style::default().fg(theme.primary_text))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(CUSTOM_LIGHT_PURPLE));
+        .border_style(Style::default().fg(theme.secondary_border));
 
     let usage = current_disk.total_space().saturating_sub(current_disk.available_space()) as f64
         / current_disk.total_space().max(1) as f64;
 
     let disk_gauge = Gauge::default()
         .block(Block::default().borders(Borders::NONE))
-        .gauge_style(Style::default().fg(CUSTOM_G_PURPLE).bg(CUSTOM_BG_PURPLE))
+        .gauge_style(Style::default().fg(theme.gauge_primary).bg(theme.gauge_background))
         .ratio(usage)
         .label(format!("{:.1}%", usage * 100.0));
 
@@ -258,29 +264,31 @@ fn render_cpu_average(
 fn render_memory(
     frame: &mut ratatui::Frame,
     system: &System,
+    app_state: &AppState,
     area: Rect,
 ) {
+    let theme = app_state.theme_manager.current_theme();
     // Memory gauge taking up 100% of the area (no spacing)
     let used = system.used_memory() as f64 / 1024.0 / 1024.0;
     let total = system.total_memory() as f64 / 1024.0 / 1024.0;
     let ratio = used / total;
     let mem_color = if ratio > 0.9 {
-        Color::Red
+        theme.memory_critical
     } else if ratio > 0.7 {
-        Color::Yellow
+        theme.memory_warning
     } else {
-        CUSTOM_G_PURPLE
+        theme.memory_normal
     };
 
     let memory_gauge = Gauge::default()
         .block(
             Block::default()
                 .title(" Memory Usage ")
-                .title_style(Style::default().fg(Color::White))
+                .title_style(Style::default().fg(theme.primary_text))
                 .borders(Borders::ALL),
         )
-        .set_style(Style::default().fg(CUSTOM_LIGHT_PURPLE))
-        .gauge_style(Style::default().fg(mem_color).bg(CUSTOM_BG_PURPLE))
+        .set_style(Style::default().fg(theme.secondary_border))
+        .gauge_style(Style::default().fg(mem_color).bg(theme.gauge_background))
         .ratio(ratio)
         .label(format!("{:.2} / {:.2} GB", used / 1024.0, total / 1024.0));
 
@@ -293,6 +301,7 @@ fn render_network(
     app_state: &mut AppState,
     area: Rect,
 ) {
+    let theme = app_state.theme_manager.current_theme();
     let eth0 = networks.get("eth0");
     let lo = networks.get("lo");
     let net = if app_state.current_interface == "eth0" { eth0 } else { lo };
@@ -326,13 +335,13 @@ fn render_network(
         total_mib,
         session_mib
     ))
-    .style(Style::default().fg(Color::White))
+    .style(Style::default().fg(theme.primary_text))
     .block(
         Block::default()
             .title(" Network Usage | Switch: b/n ")
-            .title_style(Style::default().fg(Color::White))
+            .title_style(Style::default().fg(theme.primary_text))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan)),
+            .border_style(Style::default().fg(theme.network_border)),
     );
 
     app_state.net_area = area;
@@ -346,6 +355,7 @@ fn render_processes_optimized(
     app_state: &mut AppState,
     area: Rect,
 ) {
+    let theme = app_state.theme_manager.current_theme();
     let num_cores = system.cpus().len() as f32;
     app_state.visible_rows = area.height.saturating_sub(3) as usize;
     
@@ -378,11 +388,11 @@ fn render_processes_optimized(
             let usage = proc.cpu_usage() / num_cores;
             
             let color = if usage > 50.0 {
-                Color::Red
-            } else if usage > 20.0 {
-                Color::Yellow
+                theme.process_high_cpu
+            } else if actual_index == app_state.selected_process {
+                theme.process_selected
             } else {
-                Color::White
+                theme.process_normal
             };
 
             // Use format! with owned strings to create 'static lifetime
@@ -392,11 +402,7 @@ fn render_processes_optimized(
                 format!("{:.2}%", usage),
                 format!("{:.2} MB", proc.memory() as f64 / 1024.0 / 1024.0),
             ])
-            .style(Style::default().fg(if actual_index == app_state.selected_process {
-                Color::LightCyan
-            } else {
-                color
-            }));
+            .style(Style::default().fg(color));
 
             app_state.cached_rows.push(row);
         }
@@ -421,7 +427,7 @@ fn render_processes_optimized(
                         format!("Core: {}", proc.cpu_usage() as usize % system.cpus().len()),
                         format!("Status: {:?}", proc.status()),
                     ])
-                    .style(Style::default().fg(Color::Cyan));
+                    .style(Style::default().fg(theme.process_info));
                     
                     app_state.cached_rows.insert(insert_index + 1, info_row);
                 }
@@ -436,7 +442,7 @@ fn render_processes_optimized(
     }
 
     let header = Row::new(vec!["PID", "Name", "CPU", "Memory"])
-        .style(Style::default().fg(Color::Gray));
+        .style(Style::default().fg(theme.secondary_text));
 
     let table = Table::new(
         app_state.cached_rows.clone(), // Clone the cached rows instead of rebuilding
@@ -448,14 +454,14 @@ fn render_processes_optimized(
         ],
     )
     .header(header)
-    .style(Style::default().fg(Color::LightCyan))
+    .style(Style::default().fg(theme.highlight_text))
     .block(
         Block::default()
             .title(format!(
                 " Top Processes - Enter: Info | o/p: Nice | k: kill | {}",
                 app_state.sort_category.as_str()
             ))
-            .title_style(Style::default().fg(Color::White))
+            .title_style(Style::default().fg(theme.primary_text))
             .borders(Borders::ALL),
     );
 
@@ -471,6 +477,7 @@ fn render_processes(
     app_state: &mut AppState,
     area: Rect,
 ) {
+    let theme = app_state.theme_manager.current_theme();
     let num_cores = system.cpus().len() as f32;
     app_state.visible_rows = area.height.saturating_sub(3) as usize;
     /*
@@ -488,11 +495,11 @@ fn render_processes(
             let name_str = proc.name().to_string_lossy().to_string();
             let usage = proc.cpu_usage() / num_cores;
             let color = if usage > 50.0 {
-                Color::Red
+                theme.process_high_cpu
             } else if usage > 20.0 {
-                Color::Yellow
+                theme.cpu_medium
             } else {
-                Color::White
+                theme.process_normal
             };
 
             Row::new(vec![
@@ -502,7 +509,7 @@ fn render_processes(
                 format!("{:.2} MB", proc.memory() as f64 / 1024.0 / 1024.0),
             ])
             .style(Style::default().fg(if actual_index == app_state.selected_process {
-                Color::LightCyan
+                theme.process_selected
             } else {
                 color
             }))
@@ -529,14 +536,14 @@ fn render_processes(
                         format!("Core: {}", proc.cpu_usage() as usize % system.cpus().len()),
                         format!("Status: {:?}", proc.status()),
                     ])
-                    .style(Style::default().fg(Color::Cyan)),
+                    .style(Style::default().fg(theme.process_info)),
                 );
             }
         }
     }
 
     let header = Row::new(vec!["PID", "Name", "CPU", "Memory"])
-        .style(Style::default().fg(Color::Gray));
+        .style(Style::default().fg(theme.secondary_text));
 
     let table = Table::new(
         rows,
@@ -548,7 +555,7 @@ fn render_processes(
         ],
     )
     .header(header)
-    .style(Style::default().fg(Color::LightCyan))
+    .style(Style::default().fg(theme.highlight_text))
     .block(
         Block::default()
         /*
@@ -559,7 +566,7 @@ fn render_processes(
                 " Top Processes - Enter: Info | o/p: Nice | k: kill | {}",
                 app_state.sort_category.as_str()
             ))
-            .title_style(Style::default().fg(Color::White))
+            .title_style(Style::default().fg(theme.primary_text))
             .borders(Borders::ALL),
     );
 

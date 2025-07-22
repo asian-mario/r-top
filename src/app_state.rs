@@ -36,9 +36,10 @@ pub struct AppState {
     pub info_area: Rect,
     pub net_area: Rect,
     pub disk_area: Rect,
+    pub terminal_area: Rect,
 
     // Theme management
-    pub theme_manger: ThemeManager,
+    pub theme_manager: ThemeManager,
 }
 
 impl AppState {
@@ -70,12 +71,16 @@ impl AppState {
             info_area: Rect::default(),
             net_area: Rect::default(),
             disk_area: Rect::default(),
+            terminal_area: Rect::default(),
 
             // Themes
-            theme_manger: ThemeManager::new(),
+            theme_manager: ThemeManager::new(),
         }
     }
 
+    pub fn update_terminal_area(&mut self, area: Rect) {
+        self.terminal_area = area;
+    }
     //invalidate row cache when needed -> PLEASE call this anytime you do something with processes, or else it has to wait for an action to invaludate rows cache and makes it jank
     pub fn invalidate_rows_cache(&mut self) {
         self.rows_cache_valid = false;
@@ -129,7 +134,7 @@ impl AppState {
     }
     
     pub fn switch_theme(&mut self) {
-        self.theme_manger.switch_theme();
+        self.theme_manager.switch_theme();
         self.invalidate_rows_cache();
     }
 }

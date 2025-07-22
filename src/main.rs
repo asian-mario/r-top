@@ -65,6 +65,7 @@ fn main() -> io::Result<()> {
         let processes = sort_processes_cached(&system, &app_state.sort_category, &mut app_state.process_cache);
 
         terminal.draw(|frame| {
+            app_state.update_terminal_area(frame.size());  //-> should i seperate this from render_ui?
             render_ui(frame, &system, &networks, &disks, &processes, &cpu_history, &mut app_state);
         })?;
 

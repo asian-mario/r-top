@@ -73,58 +73,58 @@ impl Theme {
             cpu_high: Color::Rgb(255, 165, 0),
             cpu_critical: Color::Red,
 
-            memory_normal: Color::White,
+            memory_normal: Color::Rgb(126, 48, 219),
             memory_warning: Color::Yellow,
             memory_critical: Color::Red,
 
             process_normal: Color::White,
-            process_selected: Color::Yellow,
+            process_selected: Color::LightCyan,
             process_high_cpu: Color::Red,
             process_info: Color::Cyan,
 
-            network_border: Color::White,
+            network_border: Color::Cyan,
 
             animation: Color::Rgb(64, 64, 64),
         }
     }
 
-    //boo! light theme
-    pub fn light() -> Self {
+    //yeah -> replaced with monotone
+    pub fn monotone() -> Self {
         Self {
-            primary_bg: Color::White,
-            secondary_bg: Color::Rgb(240, 240, 240),
+            primary_bg: Color::Rgb(20, 20, 20),
+            secondary_bg: Color::Rgb(30, 30, 30),
 
-            primary_text: Color::Black,
-            secondary_text: Color::Rgb(100, 100, 100),
-            highlight_text: Color::Blue,
-            warning_text: Color::Rgb(200, 100, 0),
-            error_text: Color::Red,
+            primary_text: Color::Rgb(220, 220, 220),
+            secondary_text: Color::Rgb(140, 140, 140),
+            highlight_text: Color::Rgb(180, 180, 180),
+            warning_text: Color::Rgb(160, 160, 160),
+            error_text: Color::Rgb(200, 200, 200),
 
-            primary_border: Color::Blue,
-            secondary_border: Color::Rgb(150, 150, 200),
-            active_border: Color::Rgb(1, 12, 133),
+            primary_border: Color::Rgb(80, 80, 80),
+            secondary_border: Color::Rgb(60, 60, 60),
+            active_border: Color::Rgb(120, 120, 120),
 
-            gauge_primary: Color::Blue,
-            gauge_secondary: Color::LightBlue,
-            gauge_background: Color::Rgb(230, 230, 230),
+            gauge_primary: Color::Rgb(140, 140, 140),
+            gauge_secondary: Color::Rgb(80, 80, 80),
+            gauge_background: Color::Rgb(40, 40, 40),
 
-            cpu_low: Color::Green,
-            cpu_medium: Color::Yellow,
-            cpu_high: Color::Rgb(255, 165, 0),
-            cpu_critical: Color::Red,
+            cpu_low: Color::Rgb(60, 60, 60),
+            cpu_medium: Color::Rgb(100, 100, 100),
+            cpu_high: Color::Rgb(140, 140, 140),
+            cpu_critical: Color::Rgb(180, 180, 180),
 
-            memory_normal: Color::Blue,
-            memory_warning: Color::Yellow,
-            memory_critical: Color::Red,
+            memory_normal: Color::Rgb(80, 80, 80),
+            memory_warning: Color::Rgb(120, 120, 120),
+            memory_critical: Color::Rgb(160, 160, 160),
 
-            process_normal: Color::Black,
-            process_selected: Color::Blue,
-            process_high_cpu: Color::Red,
-            process_info: Color::Rgb(1, 12, 133),
+            process_normal: Color::Rgb(200, 200, 200),
+            process_selected: Color::Rgb(180, 180, 180),
+            process_high_cpu: Color::Rgb(160, 160, 160),
+            process_info: Color::Rgb(120, 120, 120),
 
-            network_border: Color::Green,
+            network_border: Color::Rgb(100, 100, 100),
 
-            animation: Color::Rgb(200, 200, 200),
+            animation: Color::Rgb(40, 40, 40),
         }
     }
 
@@ -171,15 +171,15 @@ impl Theme {
 #[derive(Debug, Clone, Copy)]
 pub enum ThemeType {
     DarkPurple,
-    Light,
+    Monotone,
     HighContrast,
 }
 
 impl ThemeType {
     pub fn next(&self) -> Self {
         match self {
-            ThemeType::DarkPurple => ThemeType::Light,
-            ThemeType::Light => ThemeType::HighContrast,
+            ThemeType::DarkPurple => ThemeType::Monotone,
+            ThemeType::Monotone => ThemeType::HighContrast,
             ThemeType::HighContrast => ThemeType::DarkPurple,
         }
     }
@@ -187,7 +187,7 @@ impl ThemeType {
     pub fn as_str(&self) -> &'static str {
         match self {
             ThemeType::DarkPurple => "Dark Purple (Default)",
-            ThemeType::Light => "Light",
+            ThemeType::Monotone => "Monotone",
             ThemeType::HighContrast => "High Contrast",
         }
     }
@@ -210,7 +210,7 @@ impl ThemeManager {
         self.current_theme_type = self.current_theme_type.next();
         self.current_theme = match self.current_theme_type {
             ThemeType::DarkPurple => Theme::dark_purple(),
-            ThemeType::Light => Theme::light(),
+            ThemeType::Monotone => Theme::monotone(),
             ThemeType::HighContrast => Theme::high_contrast(),
         };
     }

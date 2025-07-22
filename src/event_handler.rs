@@ -124,6 +124,10 @@ pub fn handle_key_event(
         }
 
         KeyCode::Char('t') => {
+            app_state.effects.add_effect(
+                fx::sweep_in(Motion::RightToLeft, 20, 10, Color::from_u32(ANIMATION_COLOR), (ANIMATION_TIMER_MS, Interpolation::QuintInOut)).with_area(app_state.terminal_area)
+            );
+
             app_state.switch_theme();
         }
 

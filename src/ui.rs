@@ -4,7 +4,7 @@ use sysinfo::{System, Networks, Disks, Process};
 use crate::constants::*;
 use crate::utils::{format_bytes, CircularBuffer};
 use crate::app_state::AppState;
-use crate::system_info::{calculate_avg_cpu_history, get_busiest_core_info};
+use crate::system_info::{calculate_avg_cpu_history, get_busiest_core_info, build_process_tree, get_tree_stats};
 
 pub fn render_ui(
     frame: &mut ratatui::Frame,

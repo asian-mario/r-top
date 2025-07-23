@@ -3,6 +3,8 @@ use crate::types::SortCategory;
 use crate::constants::HISTORY_LEN;
 use crate::utils::CircularBuffer;
 use std::collections::HashMap;
+use std::collections::HashSet;
+use crate::app_state::*;
 
 // Add this struct to cache sorted processes
 pub struct ProcessCache {
@@ -205,4 +207,126 @@ pub fn get_busiest_core_info(system: &System) -> (usize, f32, String, u32) {
     }
 
     (busiest_core_idx, busiest_core_usage.cpu_usage(), top_process_name, top_process_pid)
+}
+
+// more tree stuff below
+pub fn build_process_tree(
+    system: &System,
+    app_state: &mut AppState,
+) -> Vec<TreeItem> {
+    if app_state.tree_cache_valid {
+        return app_state.tree_items.clone();
+    }
+
+    let mut tree_items = Vec::new();
+    let mut parent_child_map: HashMap<Pid, Vec<Pid>> = HashMap::new();
+    let mut all_processes: HashMap<Pid, &Process> = HashMap::new();
+
+    // find parent-child relationships
+    for (pid, process) in system.processes() {
+        all_processes.insert(*pid, process);
+        
+        if let Some(parent_pid) = process.parent() {
+            parent_child_map
+                .entry(parent_pid)
+                .or_insert_with(Vec::new)
+                .push(*pid);
+        }
+    }
+
+    // root process finding
+    let mut root_processes: Vec<Pid> = Vec::new();
+    for (pid, process) in system.processes() {
+        if let Some(parent_pid) = process.parent() {
+            if !all_processes.contains_key(&parent_pid) {
+                root_processes.push(*pid);
+            }
+        } else {
+            root_processes.push(*pid);
+        }
+    }
+
+    root_processes.sort_by(|a, b| {
+        let a_usage = all_processes.get(a).map(|p| p.cpu_usage()).unwrap_or(0.0);
+        let b_usage = all_processes.get(b).map(|p| p.cpu_usage()).unwrap_or(0.0);
+        b_usage.partial_cmp(&a_usage).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for root_pid in root_processes {
+        if let Some(process) = all_processes.get(&root_pid) {
+            build_tree_recursive(
+                root_pid,
+                None,
+                0,
+                &all_processes,
+                &parent_child_map,
+                &app_state.tree_expanded_nodes,
+                &mut tree_items,
+            );
+        }
+    }
+
+    app_state.tree_items = tree_items.clone();
+    app_state.tree_cache_valid = true;
+    
+    tree_items
+}
+
+fn build_tree_recursive(
+    pid: Pid,
+    parent_pid: Option<Pid>,
+    level: usize,
+    all_processes: &HashMap<Pid, &Process>,
+    parent_child_map: &HashMap<Pid, Vec<Pid>>,
+    expanded_nodes: &HashSet<Pid>,
+    tree_items: &mut Vec<TreeItem>,
+) {
+    if let Some(process) = all_processes.get(&pid) {
+        let children = parent_child_map.get(&pid).cloned().unwrap_or_default();
+        let has_children = !children.is_empty();
+        let is_expanded = expanded_nodes.contains(&pid);
+
+        let tree_item = TreeItem {
+            pid,
+            name: process.name().to_string_lossy().into_owned(),
+            cpu_usage: process.cpu_usage(),
+            memory: process.memory(),
+            level,
+            is_expanded,
+            has_children,
+            parent_pid,
+        };
+
+        tree_items.push(tree_item);
+
+        if is_expanded && has_children {
+            let mut sorted_children = children;
+            sorted_children.sort_by(|a, b| {
+                let a_usage = all_processes.get(a).map(|p| p.cpu_usage()).unwrap_or(0.0);
+                let b_usage = all_processes.get(b).map(|p| p.cpu_usage()).unwrap_or(0.0);
+                b_usage.partial_cmp(&a_usage).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            for child_pid in sorted_children {
+                build_tree_recursive(
+                    child_pid,
+                    Some(pid),
+                    level + 1,
+                    all_processes,
+                    parent_child_map,
+                    expanded_nodes,
+                    tree_items,
+                );
+            }
+        }
+    }
+}
+
+// Helper function to get tree statistics
+pub fn get_tree_stats(tree_items: &[TreeItem]) -> (usize, usize, usize) {
+    let total_processes = tree_items.len();
+    let expanded_nodes = tree_items.iter().filter(|item| item.is_expanded).count();
+    let max_depth = tree_items.iter().map(|item| item.level).max().unwrap_or(0);
+    
+    (total_processes, expanded_nodes, max_depth)
 }

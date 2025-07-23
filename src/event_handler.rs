@@ -16,19 +16,32 @@ pub fn handle_key_event(
     match key.code {
         KeyCode::Char('q') => return Ok(true),
 
+        KeyCode::Tab => {
+            if app_state.show_info {
+                app_state.toggle_tree_view();
+            }
+        }
         KeyCode::Down => {
-            if app_state.selected_process + 1 < processes.len() {
-                app_state.selected_process += 1;
-                if app_state.selected_process >= app_state.scroll_offset + app_state.visible_rows {
-                    app_state.scroll_offset += 1;
+            if app_state.show_info && app_state.show_tree_view {
+                app_state.tree_navigate_down();
+            } else {
+                if app_state.selected_process + 1 < processes.len() {
+                    app_state.selected_process += 1;
+                    if app_state.selected_process >= app_state.scroll_offset + app_state.visible_rows {
+                        app_state.scroll_offset += 1;
+                    }
                 }
             }
         }
         KeyCode::Up => {
-            if app_state.selected_process > 0 {
-                app_state.selected_process -= 1;
-                if app_state.selected_process < app_state.scroll_offset {
-                    app_state.scroll_offset = app_state.scroll_offset.saturating_sub(1);
+            if app_state.show_info && app_state.show_tree_view {
+                app_state.tree_navigate_up();
+            } else {
+                if app_state.selected_process > 0 {
+                    app_state.selected_process -= 1;
+                    if app_state.selected_process < app_state.scroll_offset {
+                        app_state.scroll_offset = app_state.scroll_offset.saturating_sub(1);
+                    }
                 }
             }
         }
@@ -46,14 +59,25 @@ pub fn handle_key_event(
             app_state.selected_process = 0;
             app_state.scroll_offset = 0;
         }
+        /*
+            will have to adjust controls to check whens the tree is visible
+        */
         KeyCode::Left => {
-            app_state.cycle_sort_left();
-            app_state.process_cache.invalidate();
-            //i should add the process cache invalidation to the cycle_sort_left() func, this is kind of yucky impeding cache management here
+            if app_state.show_info && app_state.show_tree_view {
+                app_state.collapse_current_node();
+            } else {
+                app_state.cycle_sort_left();
+                app_state.process_cache.invalidate();
+            }
         }
+
         KeyCode::Right => {
-            app_state.cycle_sort_right();
-            app_state.process_cache.invalidate();
+            if app_state.show_info && app_state.show_tree_view {
+                app_state.expand_current_node();
+            } else {
+                app_state.cycle_sort_right();
+                app_state.process_cache.invalidate();
+            }
         }
 
         KeyCode::Char('b') => {
@@ -66,19 +90,27 @@ pub fn handle_key_event(
         }
         
         KeyCode::Enter => {
-            let motion = if app_state.show_info {
-                Motion::LeftToRight
+            if app_state.show_info && app_state.show_tree_view {
+                if let Some(item) = app_state.get_selected_tree_item() {
+                    if item.has_children {
+                        app_state.toggle_tree_node(item.pid);
+                    }
+                }
             } else {
-                Motion::RightToLeft
-            };
-            
-            let color = Color::from_u32(ANIMATION_COLOR);
-            let timer = (ANIMATION_TIMER_MS, Interpolation::QuintInOut);
-            app_state.effects.add_effect(
-                fx::sweep_in(motion, 20, 10, color, timer).with_area(app_state.info_area)
-            );
-            app_state.toggle_info();
-            app_state.invalidate_rows_cache();
+                let motion = if app_state.show_info {
+                    Motion::LeftToRight
+                } else {
+                    Motion::RightToLeft
+                };
+                
+                let color = Color::from_u32(ANIMATION_COLOR);
+                let timer = (ANIMATION_TIMER_MS, Interpolation::QuintInOut);
+                app_state.effects.add_effect(
+                    fx::sweep_in(motion, 20, 10, color, timer).with_area(app_state.info_area)
+                );
+                app_state.toggle_info();
+                app_state.invalidate_rows_cache();
+            }
         }
 
         KeyCode::Char('o') => {
@@ -99,9 +131,13 @@ pub fn handle_key_event(
         }
         
         KeyCode::Char('k') => {
-            if let Some(proc) = processes.get(app_state.selected_process) {
-                let pid = proc.pid().as_u32() as i32;
-                
+            let target_pid = if app_state.show_info && app_state.show_tree_view {
+                app_state.get_selected_tree_item().map(|item| item.pid.as_u32() as i32)
+            } else {
+                processes.get(app_state.selected_process).map(|proc| proc.pid().as_u32() as i32)
+            };
+
+            if let Some(pid) = target_pid {
                 app_state.effects.add_effect(
                     fx::dissolve((100, Interpolation::QuintInOut)).with_area(app_state.info_area)
                 );
@@ -113,6 +149,8 @@ pub fn handle_key_event(
                 app_state.effects.add_effect(
                     fx::coalesce((100, Interpolation::QuintInOut)).with_area(app_state.info_area)
                 );
+                
+                app_state.invalidate_tree_cache();
             }
         }
         

@@ -7,6 +7,22 @@ use crate::types::SortCategory;
 use crate::constants::SWEEP_DURATION_MS;
 use crate::system_info::ProcessCache;
 
+use std::collections::{HashMap, HashSet};
+use sysinfo::Pid; 
+
+//again, should this be in its own file? maybe
+#[derive(Clone, Debug)]
+pub struct TreeItem {
+    pub pid: Pid,
+    pub name: String,
+    pub cpu_usage: f32,
+    pub memory: u64,
+    pub level: usize, //child proc. etc.
+    pub is_expanded: bool,   
+    pub has_children: bool, 
+    pub parent_pid: Option<Pid>,
+}
+
 pub struct AppState {
     pub effects: EffectManager<()>,
     pub refresh_interval: Duration,
@@ -31,6 +47,13 @@ pub struct AppState {
     pub last_scroll_offset: usize,
     pub last_selected_process: usize,
     pub rows_cache_valid: bool,
+
+    //Process tree (only when show_info is true)
+    pub tree_expanded_nodes: HashSet<Pid>,
+    pub tree_selected_index: usize,
+    pub tree_items: Vec<TreeItem>,
+    pub tree_cache_valid: bool,
+    pub show_tree_view: bool,
     
     // Animated areas
     pub info_area: Rect,
@@ -67,6 +90,13 @@ impl AppState {
             last_selected_process: usize::MAX,
             rows_cache_valid: false,
 
+            // Tree & Tree Cache
+            tree_expanded_nodes: HashSet::new(),
+            tree_selected_index: 0,
+            tree_items: Vec::new(),
+            tree_cache_valid: false,
+            show_tree_view: false, // Base flat list
+
             // Areas for Rendering
             info_area: Rect::default(),
             net_area: Rect::default(),
@@ -77,10 +107,63 @@ impl AppState {
             theme_manager: ThemeManager::new(),
         }
     }
+    // methods to for tree shit
+    pub fn invalidate_tree_cache(&mut self) {
+        self.tree_cache_valid = false;
+    }
+
+    pub fn toggle_tree_view(&mut self) {
+        if self.show_info {
+            self.show_tree_view = !self.show_tree_view;
+            self.invalidate_tree_cache();
+        }
+    }
+
+    pub fn toggle_tree_node(&mut self, pid: Pid) {
+        if self.tree_expanded_nodes.contains(&pid) {
+            self.tree_expanded_nodes.remove(&pid);
+        } else {
+            self.tree_expanded_nodes.insert(pid);
+        }
+        self.invalidate_tree_cache();
+    }
+
+    pub fn tree_navigate_up(&mut self) {
+        if self.tree_selected_index > 0 {
+            self.tree_selected_index -= 1;
+        }
+    }
+
+    pub fn tree_navigate_down(&mut self) {
+        if self.tree_selected_index + 1 < self.tree_items.len() {
+            self.tree_selected_index += 1;
+        }
+    }
+
+    pub fn get_selected_tree_item(&self) -> Option<&TreeItem> {
+        self.tree_items.get(self.tree_selected_index)
+    }
+
+    pub fn expand_current_node(&mut self) {
+        if let Some(item) = self.tree_items.get(self.tree_selected_index) {
+            if item.has_children {
+                self.tree_expanded_nodes.insert(item.pid);
+                self.invalidate_tree_cache();
+            }
+        }
+    }
+
+    pub fn collapse_current_node(&mut self) {
+        if let Some(item) = self.tree_items.get(self.tree_selected_index) {
+            self.tree_expanded_nodes.remove(&item.pid);
+            self.invalidate_tree_cache();
+        }
+    }
 
     pub fn update_terminal_area(&mut self, area: Rect) {
         self.terminal_area = area;
     }
+
     //invalidate row cache when needed -> PLEASE call this anytime you do something with processes, or else it has to wait for an action to invaludate rows cache and makes it jank
     pub fn invalidate_rows_cache(&mut self) {
         self.rows_cache_valid = false;
@@ -107,8 +190,16 @@ impl AppState {
         }
     }
 
+    //change this up to work with the new tree diagram (please work)
     pub fn toggle_info(&mut self) {
         self.show_info = !self.show_info;
+        if !self.show_info {
+            // reset tree when show_info is collapsed
+            self.show_tree_view = false;
+            self.tree_selected_index = 0;
+            self.invalidate_tree_cache();
+        }
+        self.invalidate_rows_cache();
     }
 
     pub fn previous_disk(&mut self) {
@@ -116,7 +207,6 @@ impl AppState {
             self.current_disk_index -= 1;
         }
     }
-
     pub fn next_disk(&mut self, max_disks: usize) {
         if self.current_disk_index + 1 < max_disks {
             self.current_disk_index += 1;

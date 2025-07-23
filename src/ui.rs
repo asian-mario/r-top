@@ -358,25 +358,135 @@ fn render_processes_optimized(
     let theme = app_state.theme_manager.current_theme();
     let num_cores = system.cpus().len() as f32;
     app_state.visible_rows = area.height.saturating_sub(3) as usize;
+
+    // show tree or flat view
+    let show_tree = app_state.show_info && app_state.show_tree_view;
     
+    if show_tree {
+        render_tree_view(frame, system, app_state, area);
+    } else {
+        render_flat_view(frame, system, processes, app_state, area);
+    }
+}
+
+fn render_tree_view(
+    frame: &mut ratatui::Frame,
+    system: &System,
+    app_state: &mut AppState,
+    area: Rect,
+) {
+    let tree_items = build_process_tree(system, app_state);
+
+    let theme = app_state.theme_manager.current_theme();
+    
+    // mutable borrows kind of confusing
+    let visible_rows = app_state.visible_rows;
+    let tree_selected_index = app_state.tree_selected_index;
+    
+    // tree rows for visible items
+    let mut rows: Vec<Row> = Vec::new();
+    let visible_start = tree_selected_index.saturating_sub(visible_rows / 2);
+    let visible_end = (visible_start + visible_rows).min(tree_items.len());
+    
+    for (i, item) in tree_items
+        .iter()
+        .skip(visible_start)
+        .take(visible_end - visible_start)
+        .enumerate()
+    {
+        let actual_index = visible_start + i;
+        let is_selected = actual_index == tree_selected_index;
+        
+        // Create indentation based on tree level
+        let indent = "  ".repeat(item.level);
+        let expansion_indicator = if item.has_children {
+            if item.is_expanded { "▼ " } else { "▶ " }
+        } else {
+            "  "
+        };
+        
+        let name_with_tree = format!("{}{}{}", indent, expansion_indicator, item.name);
+        
+      
+        let color = if is_selected {
+            theme.process_selected
+        } else if item.cpu_usage > 50.0 {
+            theme.process_high_cpu
+        } else if item.level > 0 {
+            theme.secondary_text // child process dimming
+        } else {
+            theme.process_normal
+        };
+
+        let row = Row::new(vec![
+            item.pid.to_string(),
+            name_with_tree,
+            format!("{:.2}%", item.cpu_usage),
+            format!("{:.2} MB", item.memory as f64 / 1024.0 / 1024.0),
+        ])
+        .style(Style::default().fg(color));
+
+        rows.push(row);
+    }
+
+    let (total_processes, expanded_nodes, max_depth) = get_tree_stats(&tree_items);
+    
+    let header = Row::new(vec!["PID", "Process Tree", "CPU", "Memory"])
+        .style(Style::default().fg(theme.secondary_text));
+
+    let table = Table::new(
+        rows,
+        &[
+            Constraint::Length(8),
+            Constraint::Percentage(60),
+            Constraint::Length(10),
+            Constraint::Length(15),
+        ],
+    )
+    .header(header)
+    .style(Style::default().fg(theme.highlight_text))
+    .block(
+        Block::default()
+            .title(format!(
+                " Process Tree ({}/{} processes, {} expanded, depth {}) - Tab: Switch View | ←→: Expand/Collapse | Enter: Toggle | k: Kill ",
+                tree_items.len(),
+                total_processes,
+                expanded_nodes,
+                max_depth + 1
+            ))
+            .title_style(Style::default().fg(theme.primary_text))
+            .borders(Borders::ALL),
+    );
+
+    app_state.info_area = area;
+    frame.render_widget(table, area);
+}
+
+fn render_flat_view(
+    frame: &mut ratatui::Frame,
+    system: &System,
+    processes: &Vec<&Process>,
+    app_state: &mut AppState,
+    area: Rect,
+) {
+    let theme = app_state.theme_manager.current_theme();
+    let num_cores = system.cpus().len() as f32;
     let current_process_count = processes.len();
     
-    // Check if we need to rebuild the row cache
+    // Check if we need to rebuild the row cache (same logic as before)
     let needs_rebuild = !app_state.rows_cache_valid
         || app_state.last_process_count != current_process_count
         || app_state.last_scroll_offset != app_state.scroll_offset
         || app_state.last_selected_process != app_state.selected_process;
 
     if needs_rebuild {
-        // Clear and rebuild cache
+        // Clear and rebuild cache (same as existing logic)
         app_state.cached_rows.clear();
         
-        // Pre-allocate if needed
         if app_state.cached_rows.capacity() < app_state.visible_rows {
             app_state.cached_rows.reserve(app_state.visible_rows);
         }
         
-        // Create rows only for visible processes
         for (i, proc) in processes
             .iter()
             .skip(app_state.scroll_offset)
@@ -384,7 +494,7 @@ fn render_processes_optimized(
             .enumerate()
         {
             let actual_index = app_state.scroll_offset + i;
-            let name_str = proc.name().to_string_lossy().into_owned(); // Convert to owned String
+            let name_str = proc.name().to_string_lossy().into_owned();
             let usage = proc.cpu_usage() / num_cores;
             
             let color = if usage > 50.0 {
@@ -395,7 +505,6 @@ fn render_processes_optimized(
                 theme.process_normal
             };
 
-            // Use format! with owned strings to create 'static lifetime
             let row = Row::new(vec![
                 proc.pid().to_string(),
                 name_str,
@@ -444,8 +553,10 @@ fn render_processes_optimized(
     let header = Row::new(vec!["PID", "Name", "CPU", "Memory"])
         .style(Style::default().fg(theme.secondary_text));
 
+    let title_extra = if app_state.show_info { " | Tab: Tree View" } else { "" };
+
     let table = Table::new(
-        app_state.cached_rows.clone(), // Clone the cached rows instead of rebuilding
+        app_state.cached_rows.clone(),
         &[
             Constraint::Percentage(50),
             Constraint::Percentage(30),
@@ -458,7 +569,8 @@ fn render_processes_optimized(
     .block(
         Block::default()
             .title(format!(
-                " Top Processes - Enter: Info | o/p: Nice | k: kill | {}",
+                " Top Processes - Enter: Info{} | o/p: Nice | k: kill | {}",
+                title_extra,
                 app_state.sort_category.as_str()
             ))
             .title_style(Style::default().fg(theme.primary_text))

@@ -1,6 +1,6 @@
 # b-top (bad-top)
 
-**b-top** (short for **bad-top**) is a terminal-based, Rust-powered system resource viewer for UNIX-like systems. Inspired by tools like `bashtop` and `htop`, `b-top` provides a visually rich and interactive interface for monitoring CPU, memory, network, and process activity, rendered with smooth animations and intuitive controls.
+**b-top** (short for **bad-top**) is a terminal-based, Rust-powered system resource viewer for UNIX-like systems. Inspired by tools like `bashtop` and `htop`, `b-top` provides a visually impressive process monitoring and management tool with shader-like implementations by using TachyonFX.
 
 ---
 
@@ -10,9 +10,10 @@
 - **CPU Usage Graph**: Sparkline graph showing historical average CPU usage.
 - **Memory Monitoring**: Visual gauge showing used vs. total memory in GB.
 - **Network Stats**: Displays RX/TX bytes for interfaces like `eth0` and `lo`.
-- **Process Table**: Sortable list of top processes by CPU, memory, or network usage.
+- **Process Table**: Sortable list of top processes by CPU, memory, or network usage (WIP).
 - **Smooth Animations**: Powered by `tachyonfx` for subtle UI transitions.
 - **Keyboard Navigation**: Scroll, jump, sort, and switch interfaces with intuitive keybindings.
+- **Disk Usage**: Track disk usage with a visual gauge and switch between disks for active monitoring.
 - **Tree View**: See parent and child processes for each running/sleeping process.
 
 

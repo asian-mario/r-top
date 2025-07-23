@@ -20,7 +20,10 @@ pub struct TreeItem {
     pub level: usize, //child proc. etc.
     pub is_expanded: bool,   
     pub has_children: bool, 
-    pub parent_pid: Option<Pid>,
+    pub parent_pid: Option<Pid>, 
+    /*
+        i think theres an issue with usage tracking here, parent_pid is clearly used when the tree is being built so?
+     */
 }
 
 pub struct AppState {

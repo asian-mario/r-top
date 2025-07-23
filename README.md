@@ -13,6 +13,7 @@
 - **Process Table**: Sortable list of top processes by CPU, memory, or network usage.
 - **Smooth Animations**: Powered by `tachyonfx` for subtle UI transitions.
 - **Keyboard Navigation**: Scroll, jump, sort, and switch interfaces with intuitive keybindings.
+- **Tree View**: See parent and child processes for each running/sleeping process.
 
 
 ---
@@ -40,6 +41,7 @@
 | `ENTER`        | View more process info           |
 | `k`            | Kill selected process            |
 | `u / i`        | Switch between disks             |
+| `tab`          | Open tree view during `show_info`|
 ---
 
 ## Installation
@@ -65,16 +67,6 @@ tar -xzf b-top-linux-x86_64.tar.gz
 sudo mv b-top /usr/local/bin/
 
 ```
-
----
-
-## TODO / Roadmap
-
-- [x] Add disk I/O monitoring
-- [ ] Support for more network interfaces
-- [x] Configurable refresh rate
-- [ ] Add resource management featres
-
 ---
 
 ## License

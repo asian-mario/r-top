@@ -18,6 +18,9 @@ pub fn handle_key_event(
 
         KeyCode::Tab => {
             if app_state.show_info {
+                app_state.effects.add_effect(
+                    fx::fade_from(Color::Black, Color::White, 100).with_area(app_state.info_area)
+                );
                 app_state.toggle_tree_view();
             }
         }

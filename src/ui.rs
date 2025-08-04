@@ -375,19 +375,19 @@ fn render_processes_optimized(
     
     let filtered_processes = sort_and_filter_processes_cached(system, app_state);
 
-    app_state.visible_rows = process_area.height.saturating_sub(3) as usize;
+    app_state.visible_rows = area.height.saturating_sub(3) as usize;
 
     let max_processes = filtered_processes.len();
     if app_state.selected_process >= max_processes && max_processes > 0 {
         app_state.selected_process = max_processes - 1;
     }
     
-    let show_tree = app_state.show_info && app_state.show_tree_view && !app_state.search_active;
+    let show_tree = app_state.show_info && app_state.show_tree_view;
 
     if show_tree{
         render_tree_view(frame, system, app_state, process_area);
     } else {
-        render_flat_view(frame, system, &filtered_processes, app_state, area);
+        render_flat_view(frame, system, &filtered_processes, app_state, process_area);
     }
 }
 
@@ -510,7 +510,7 @@ fn render_search_bar(
                 .title(" Search Processes (ESC to exit, / to toggle")
                 .title_style(Style::default().fg(theme.highlight_text))
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.active_border)),
+                .border_style(Style::default().fg(theme.active_border))
         );
 
     frame.render_widget(search_widget, area);
@@ -532,7 +532,8 @@ fn render_flat_view(
         || app_state.last_process_count != current_process_count
         || app_state.last_scroll_offset != app_state.scroll_offset
         || app_state.last_selected_process != app_state.selected_process
-        || !app_state.search_cache_valid;
+        || !app_state.search_cache_valid
+        || app_state.search_active;
 
     if needs_rebuild {
         // Clear and rebuild cache (same as existing logic)
@@ -563,7 +564,7 @@ fn render_flat_view(
             if app_state.search_active && !app_state.is_search_empty() {
                 if name_str.to_lowercase().contains(&app_state.search_query.to_lowercase()) {
                     color = if actual_index == app_state.selected_process {
-                        theme.process_selected
+                        theme.secondary_text
                     } else {
                         theme.highlight_text
                     };
@@ -582,7 +583,7 @@ fn render_flat_view(
         }
         
         // Handle info insertion if needed
-        if app_state.show_info && !app_state.search_active {
+        if app_state.show_info {
             if let Some(proc) = processes.get(app_state.selected_process) {
                 let insert_index = app_state.selected_process.saturating_sub(app_state.scroll_offset);
                 if insert_index < app_state.cached_rows.len() {

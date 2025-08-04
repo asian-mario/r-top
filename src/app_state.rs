@@ -6,6 +6,7 @@ use crate::theme::{Theme, ThemeManager};
 use crate::types::SortCategory;
 use crate::constants::SWEEP_DURATION_MS;
 use crate::system_info::ProcessCache;
+use crate::event::{KeyEvent, KeyCode};
 
 use std::collections::{HashMap, HashSet};
 use sysinfo::Pid; 
@@ -284,5 +285,45 @@ impl AppState {
 
     pub fn is_search_empty(&self) -> bool {
         self.search_query.trim().is_empty()
+    }
+
+    pub fn handle_search_input(&mut self, key: KeyEvent) -> bool {
+        if !self.search_active{
+            return false;
+        }
+
+        match key.code {
+            KeyCode::Char(c) => {
+                if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ' ') {
+                    self.add_search_char(c);
+                    return true;
+                } else{
+                    return false;
+                }
+            }
+            KeyCode::Backspace => {
+                if !self.search_query.is_empty() {
+                    self.remove_search_char();
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            KeyCode::Delete => {
+                if !self.search_query.is_empty(){
+                    self.search_query.clear();
+                    self.search_cache_valid = false;
+                    self.selected_process = 0;
+                    self.scroll_offset = 0;
+                    self.invalidate_rows_cache();
+                } else {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+
+        false
+
     }
 }

@@ -4,6 +4,7 @@ use crate::constants::HISTORY_LEN;
 use crate::utils::CircularBuffer;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::os::unix::process;
 use crate::app_state::*;
 
 // Add this struct to cache sorted processes
@@ -329,4 +330,62 @@ pub fn get_tree_stats(tree_items: &[TreeItem]) -> (usize, usize, usize) {
     let max_depth = tree_items.iter().map(|item| item.level).max().unwrap_or(0);
     
     (total_processes, expanded_nodes, max_depth)
+}
+
+// should process similar names from the search query then cache the results to prevent slow repeated search times
+pub fn filter_processes_cached<'a>(
+    system: &'a System,
+    processes: &Vec<&'a Process>,
+    app_state: &mut AppState,
+) -> Vec<&'a Process> {
+    if !app_state.search_active || app_state.is_search_empty() {
+        app_state.filtered_processes.clear();
+        app_state.search_cache_valid = true;
+        return processes.clone();
+    }
+
+    if !app_state.search_cache_valid {
+        app_state.filtered_processes.clear();
+        let query = app_state.search_query.to_lowercase();
+
+        for (index, process) in processes.iter().enumerate() {
+            let process_name = process.name().to_string_lossy().to_lowercase();
+
+            if process_name.contains(&query) {
+                app_state.filtered_processes.push(index);
+            }
+        }
+        app_state.search_cache_valid = true;
+    }
+
+    app_state.filtered_processes
+        .iter()
+        .filter_map(|&index| processes.get(index))
+        .copied()
+        .collect()
+}
+
+pub fn get_actual_process_index(app_state: &AppState, filtered_index: usize) -> Option<usize> {
+    if app_state.search_active && !app_state.is_search_empty() {
+        app_state.filtered_processes.get(filtered_index).copied()
+    } else {
+        Some(filtered_index)
+    }
+}
+
+pub fn get_filtered_process_count(app_state: &AppState, total_processes: usize) -> usize {
+    if app_state.search_active && !app_state.is_search_empty() {
+        app_state.filtered_processes.len()
+    } else {
+        total_processes
+    }
+}
+
+pub fn sort_and_filter_processes_cached<'a>(
+    system: &'a System,
+    app_state: &mut AppState,
+) -> Vec<&'a Process> {
+    let sorted_processes = sort_processes_cached(system, &app_state.sort_category, &mut app_state.process_cache);
+
+    filter_processes_cached(system, &sorted_processes, app_state)
 }

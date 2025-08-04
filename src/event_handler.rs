@@ -6,6 +6,7 @@ use ratatui::prelude::Color;
 use libc::{kill, SIGKILL};
 use crate::app_state::AppState;
 use crate::constants::{ANIMATION_COLOR, ANIMATION_TIMER_MS};
+use crate::system_info::{filter_processes_cached, sort_processes_cached};
 
 pub fn handle_key_event(
     key: KeyEvent,
@@ -15,6 +16,16 @@ pub fn handle_key_event(
 ) -> io::Result<bool> {
     match key.code {
         KeyCode::Char('q') => return Ok(true),
+
+        KeyCode::Char('/') => {
+            app_state.toggle_search();
+        }
+
+        KeyCode::Esc => {
+            if app_state.search_active {
+                app_state.toggle_search();
+            }
+        }
 
         KeyCode::Tab => {
             if app_state.show_info {
@@ -137,7 +148,14 @@ pub fn handle_key_event(
             let target_pid = if app_state.show_info && app_state.show_tree_view {
                 app_state.get_selected_tree_item().map(|item| item.pid.as_u32() as i32)
             } else {
-                processes.get(app_state.selected_process).map(|proc| proc.pid().as_u32() as i32)
+                let actual_process = if app_state.search_active && !app_state.is_search_empty() {
+                    let sorted_processes = sort_processes_cached(system, &app_state.sort_category, &mut app_state.process_cache);
+                    filter_processes_cached(system, &sorted_processes, app_state)
+                } else {
+                    processes.clone()
+                };
+
+                actual_process.get(app_state.selected_process).map(|proc| proc.pid().as_u32() as i32)
             };
 
             if let Some(pid) = target_pid {
@@ -154,6 +172,8 @@ pub fn handle_key_event(
                 );
                 
                 app_state.invalidate_tree_cache();
+                app_state.invalidate_search_cache();
+                app_state.process_cache.invalidate();
             }
         }
         

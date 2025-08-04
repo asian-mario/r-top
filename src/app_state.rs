@@ -66,6 +66,12 @@ pub struct AppState {
 
     // Theme management
     pub theme_manager: ThemeManager,
+
+    // Search
+    pub search_active: bool,
+    pub search_query: String,
+    pub filtered_processes: Vec<usize>,
+    pub search_cache_valid: bool,
 }
 
 impl AppState {
@@ -108,6 +114,13 @@ impl AppState {
 
             // Themes
             theme_manager: ThemeManager::new(),
+
+            // Search
+            search_active: false,
+            search_query: String::new(),
+            filtered_processes: Vec::new(),
+            search_cache_valid: false,
+
         }
     }
     // methods to for tree shit
@@ -229,5 +242,47 @@ impl AppState {
     pub fn switch_theme(&mut self) {
         self.theme_manager.switch_theme();
         self.invalidate_rows_cache();
+    }
+
+    pub fn toggle_search(&mut self){
+        self.search_active = !self.search_active;
+        if !self.search_active {
+            //reset all vars
+            self.search_query.clear();
+            self.filtered_processes.clear();
+            self.search_cache_valid = false;
+            self.selected_process = 0;
+            self.scroll_offset = 0;
+        }
+
+        self.invalidate_rows_cache();
+    }
+
+    pub fn add_search_char(&mut self, c: char){
+        if self.search_active {
+            self.search_query.push(c);
+            self.search_cache_valid = false;
+            self.selected_process = 0;
+            self.scroll_offset = 0;
+            self.invalidate_rows_cache();
+        }
+    }
+
+    pub fn remove_search_char(&mut self) {
+        if self.search_active && !self.search_query.is_empty() {
+            self.search_query.pop();
+            self.search_cache_valid = false;
+            self.selected_process = 0;
+            self.scroll_offset = 0;
+            self.invalidate_rows_cache();
+        }
+    }
+
+    pub fn invalidate_search_cache(&mut self) {
+        self.search_cache_valid = false;
+    }
+
+    pub fn is_search_empty(&self) -> bool {
+        self.search_query.trim().is_empty()
     }
 }

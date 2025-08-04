@@ -1,10 +1,12 @@
+use std::os::unix::process;
+use std::thread::current;
 use std::{time::Duration};
 use ratatui::{prelude::*, symbols::bar::Set, widgets::*, style::*};
 use sysinfo::{System, Networks, Disks, Process};
 use crate::constants::*;
 use crate::utils::{format_bytes, CircularBuffer};
 use crate::app_state::AppState;
-use crate::system_info::{calculate_avg_cpu_history, get_busiest_core_info, build_process_tree, get_tree_stats};
+use crate::system_info::{sort_and_filter_processes_cached, get_actual_process_index, get_filtered_process_count,calculate_avg_cpu_history, get_busiest_core_info, build_process_tree, get_tree_stats};
 
 pub fn render_ui(
     frame: &mut ratatui::Frame,
@@ -356,16 +358,36 @@ fn render_processes_optimized(
     area: Rect,
 ) {
     let theme = app_state.theme_manager.current_theme();
-    let num_cores = system.cpus().len() as f32;
-    app_state.visible_rows = area.height.saturating_sub(3) as usize;
-
-    // show tree or flat view
-    let show_tree = app_state.show_info && app_state.show_tree_view;
-    
-    if show_tree {
-        render_tree_view(frame, system, app_state, area);
+    let (search_area, process_area) = if app_state.search_active {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(5)])
+            .split(area);
+        (Some(chunks[0]), chunks[1])
     } else {
-        render_flat_view(frame, system, processes, app_state, area);
+        (None, area)
+    };
+
+    if let Some(search_area) = search_area {
+        render_search_bar(frame, app_state, search_area);
+    }
+
+    
+    let filtered_processes = sort_and_filter_processes_cached(system, app_state);
+
+    app_state.visible_rows = process_area.height.saturating_sub(3) as usize;
+
+    let max_processes = filtered_processes.len();
+    if app_state.selected_process >= max_processes && max_processes > 0 {
+        app_state.selected_process = max_processes - 1;
+    }
+    
+    let show_tree = app_state.show_info && app_state.show_tree_view && !app_state.search_active;
+
+    if show_tree{
+        render_tree_view(frame, system, app_state, process_area);
+    } else {
+        render_flat_view(frame, system, &filtered_processes, app_state, area);
     }
 }
 
@@ -462,6 +484,38 @@ fn render_tree_view(
     frame.render_widget(table, area);
 }
 
+fn render_search_bar(
+    frame: &mut ratatui::Frame,
+    app_state: &AppState,
+    area: Rect,
+) {
+    let theme = app_state.theme_manager.current_theme();
+
+    let search_text = if app_state.search_query.is_empty() {
+        "Type to search processes...".to_string()
+    } else {
+        app_state.search_query.clone()
+    };
+
+    let search_style = if app_state.search_query.is_empty() {
+        Style::default().fg(theme.secondary_text)
+    } else {
+        Style::default().fg(theme.primary_text)
+    };
+
+    let search_widget = Paragraph::new(search_text)
+        .style(search_style)
+        .block(
+            Block::default()
+                .title(" Search Processes (ESC to exit, / to toggle")
+                .title_style(Style::default().fg(theme.highlight_text))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.active_border)),
+        );
+
+    frame.render_widget(search_widget, area);
+}
+
 fn render_flat_view(
     frame: &mut ratatui::Frame,
     system: &System,
@@ -477,7 +531,8 @@ fn render_flat_view(
     let needs_rebuild = !app_state.rows_cache_valid
         || app_state.last_process_count != current_process_count
         || app_state.last_scroll_offset != app_state.scroll_offset
-        || app_state.last_selected_process != app_state.selected_process;
+        || app_state.last_selected_process != app_state.selected_process
+        || !app_state.search_cache_valid;
 
     if needs_rebuild {
         // Clear and rebuild cache (same as existing logic)
@@ -497,13 +552,23 @@ fn render_flat_view(
             let name_str = proc.name().to_string_lossy().into_owned();
             let usage = proc.cpu_usage() / num_cores;
             
-            let color = if usage > 50.0 {
+            let mut color = if usage > 50.0 {
                 theme.process_high_cpu
             } else if actual_index == app_state.selected_process {
                 theme.process_selected
             } else {
                 theme.process_normal
             };
+
+            if app_state.search_active && !app_state.is_search_empty() {
+                if name_str.to_lowercase().contains(&app_state.search_query.to_lowercase()) {
+                    color = if actual_index == app_state.selected_process {
+                        theme.process_selected
+                    } else {
+                        theme.highlight_text
+                    };
+                }
+            }
 
             let row = Row::new(vec![
                 proc.pid().to_string(),
@@ -515,9 +580,9 @@ fn render_flat_view(
 
             app_state.cached_rows.push(row);
         }
-
+        
         // Handle info insertion if needed
-        if app_state.show_info {
+        if app_state.show_info && !app_state.search_active {
             if let Some(proc) = processes.get(app_state.selected_process) {
                 let insert_index = app_state.selected_process.saturating_sub(app_state.scroll_offset);
                 if insert_index < app_state.cached_rows.len() {
@@ -555,6 +620,12 @@ fn render_flat_view(
 
     let title_extra = if app_state.show_info { " | Tab: Tree View" } else { "" };
 
+    let search_info = if app_state.search_active {
+        format!(" | Filtered: {}/{}", current_process_count, app_state.last_process_count)
+    } else {
+        String::new()
+    };
+
     let table = Table::new(
         app_state.cached_rows.clone(),
         &[
@@ -569,7 +640,9 @@ fn render_flat_view(
     .block(
         Block::default()
             .title(format!(
-                " Top Processes - Enter: Info{} | o/p: Nice | k: kill | {}",
+                " Top Processes - /: Search{}{} | Enter: Info{} | o/p: Nice | k: kill | {}",
+                search_info,
+                if app_state.search_active{" | ESC: Exit Search"} else {""},
                 title_extra,
                 app_state.sort_category.as_str()
             ))

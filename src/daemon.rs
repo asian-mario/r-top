@@ -82,7 +82,7 @@ pub enum ServiceStatus {
 }
 
 pub struct DaemonSupervisor {
-    services: HashMap<String, ServiceState>,
+    pub services: HashMap<String, ServiceState>,
     config_path: PathBuf,
     system: System,
 }
@@ -384,6 +384,150 @@ impl DaemonSupervisor {
     pub fn get_service_status(&self, name: &str) -> Option<&ServiceStatus> {
         self.services.get(name).map(|s| &s.status)
     }
+
+    // ========================= SILENT SERVICES ============================
+    pub fn start_service_silent(&mut self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let service = self.services.get_mut(name)
+            .ok_or(format!("Service '{}' not found", name))?;
+
+        if service.status == ServiceStatus::Running {
+            return Ok(());
+        } else {
+            service.status = ServiceStatus::Starting;
+
+            let mut cmd = Command::new(&service.config.command);
+            cmd.args(&service.config.args);
+
+            if let Some(working_dir) = &service.config.working_dir {
+                cmd.current_dir(working_dir);
+            }
+
+            for (key, value) in &service.config.env_vars {
+                cmd.env(key, value);
+            }
+
+            let child = cmd.spawn()?;
+            service.pid = Some(child.id());
+            service.status = ServiceStatus::Running;
+
+            Ok(())
+        }
+    }
+
+    pub fn stop_service_silent(&mut self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let service = self.services.get_mut(name)
+            .ok_or(format!("Service '{}' not found", name))?;
+
+        if let Some(pid) = service.pid {
+            service.status = ServiceStatus::Stopping;
+
+            unsafe {
+                libc::kill(pid as i32, libc::SIGTERM);
+            }
+
+            std::thread::sleep(Duration::from_secs(2)); 
+
+            self.system.refresh_all();
+            if self.system.process(sysinfo::Pid::from(pid as usize)).is_some() {
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
+            }
+
+            service.pid = None;
+            service.status = ServiceStatus::Stopped;
+        }
+
+        Ok(())
+    }
+
+    pub fn check_services_silent(&mut self) {
+        self.system.refresh_all();
+        let now = Instant::now();
+        let mut to_restart: Vec<String> = Vec::new();
+        let mut health_checks_to_run: Vec<(String, HealthCheck)> = Vec::new();
+        let mut restart_candidates: Vec<String> = Vec::new();
+
+        for (name, service) in self.services.iter_mut() {
+            if let Some(pid) = service.pid {
+                if self.system.process(sysinfo::Pid::from(pid as usize)).is_none() {
+                    service.pid = None;
+                    service.status = ServiceStatus::Failed;
+                    restart_candidates.push(name.clone());
+                }
+            }
+
+            if let Some(health_check) = &service.health_check {
+                if service.status == ServiceStatus::Running {
+                    let should_check = service.last_health_check
+                        .map_or(true, |last| now.duration_since(last) >= health_check.interval);
+
+                    if should_check {
+                        health_checks_to_run.push((name.clone(), health_check.clone()));
+                        service.last_health_check = Some(now);
+                    }
+                }
+            }
+        }
+
+        for name in restart_candidates {
+            if let Some(service) = self.services.get(&name) {
+                if self.should_restart(service) {
+                    to_restart.push(name.clone());
+                }
+            }
+        }
+
+        for (name, health_check) in health_checks_to_run {
+            self.perform_health_check_silent(&name, &health_check);
+        }
+
+        for name in to_restart {
+            let _ = self.restart_service_silent(&name); 
+        }
+    }
+
+    fn restart_service_silent(&mut self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let service = self.services.get_mut(name).unwrap();
+
+        if let Some(last_restart) = service.last_restart {
+            let restart_delay = Duration::from_secs(service.config.restart_delay_secs);
+            let elapsed = Instant::now().duration_since(last_restart);
+            if elapsed < restart_delay {
+                std::thread::sleep(restart_delay - elapsed);
+            }
+        }
+
+        service.restart_count += 1;
+        service.last_restart = Some(Instant::now());
+
+        self.start_service_silent(name)
+    }
+
+    fn perform_health_check_silent(&mut self, name: &str, health_check: &HealthCheck) {
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(&health_check.command)
+            .output();
+
+        let service = self.services.get_mut(name).unwrap();
+
+        match output {
+            Ok(output) if output.status.success() => {
+                service.health_failures = 0;
+                if service.status == ServiceStatus::Unhealthy {
+                    service.status = ServiceStatus::Running;
+                }
+            }
+            _ => {
+                service.health_failures += 1;
+                if service.health_failures >= health_check.retries {
+                    service.status = ServiceStatus::Unhealthy;
+                }
+            }
+        }
+    }
+    
 }
 
 pub fn run_daemon_mode(config_path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
@@ -447,6 +591,21 @@ pub fn run_daemon_mode(config_path: Option<PathBuf>) -> Result<(), Box<dyn std::
 
     loop {
         supervisor.check_services();
+        std::thread::sleep(Duration::from_secs(5));
+    }
+}
+
+pub fn run_daemon_mode_silent(config_path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+    let mut supervisor = DaemonSupervisor::new(config_path);
+    supervisor.load_config()?;
+
+    let service_names: Vec<String> = supervisor.services.keys().cloned().collect();
+    for name in service_names {
+        let _ = supervisor.start_service_silent(&name); // Ignore errors silently
+    }
+
+    loop {
+        supervisor.check_services_silent();
         std::thread::sleep(Duration::from_secs(5));
     }
 }

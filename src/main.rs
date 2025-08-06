@@ -21,7 +21,7 @@ use event_handler::*;
 use system_info::*;
 use app_state::*;
 use utils::CircularBuffer;
-use daemon::run_daemon_mode;
+use daemon::{run_daemon_mode, DaemonSupervisor};
 
 /*
     please refrain from taking any comments that dont have proper punctuation as serious
@@ -34,6 +34,9 @@ use daemon::run_daemon_mode;
     - CPU HISTORY CIRC BUFFER
 */
 fn main() -> io::Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    eprintln!("Raw args: {:?}", args);
+
     let matches = ClapCommand::new("b-top")
         .version("0.2.5")
         .about("b-top is a tui system monitor written in Rust with an extended daemon supervisor.")
@@ -43,6 +46,14 @@ fn main() -> io::Result<()> {
                 .long("daemon")
                 .help("Run b-top in daemon mode, which will run the daemon supervisor in the background.")
                 .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("integrate")
+                .short('i')
+                .long("integrate")
+                .help("Run daemon in the background while showing the process monitor (requires -d)")
+                .action(ArgAction::SetTrue)
+                .required(false)
         )
         .arg(
             Arg::new("config")
@@ -55,13 +66,30 @@ fn main() -> io::Result<()> {
         )
         .get_matches();
 
-    if matches.get_flag("daemon") {
-        let config_path = matches.get_one::<PathBuf>("config").cloned();
-        println!("Starting b-top in daemon mode...");
-        return run_daemon_mode_wrapper(config_path);
+    let daemon_mode = matches.get_flag("daemon");
+    let integrate_mode = matches.get_flag("integrate");
+    let config_path = matches.get_one::<String>("config").map(PathBuf::from);
+
+    if let Some(ref path) = config_path {
+        println!("Config Path: {:?}", path);
     }
 
-    run_process_monitor()
+    if integrate_mode && !daemon_mode {
+        println!("Error: --integrate (-i) requires --daemon (-d)");
+        println!("Usage: b-top -d -i");
+        std::process::exit(1);
+    }
+
+    if daemon_mode && integrate_mode {
+        println!("=== STARTING INTEGRATED MODE ===");
+        return run_integrated_mode(config_path);
+    } else if daemon_mode {
+        println!("=== STARTING DAEMON MODE ===");
+        return run_daemon_mode_wrapper(config_path);
+    } else {
+        println!("=== STARTING PROCMON MODE ===");
+        return run_process_monitor();
+    }
 }
 
 fn run_daemon_mode_wrapper(config_path: Option<PathBuf>) -> io::Result<()> {
@@ -73,6 +101,44 @@ fn run_daemon_mode_wrapper(config_path: Option<PathBuf>) -> io::Result<()> {
         }
     }
 }
+
+fn run_integrated_mode(config_path: Option<PathBuf>) -> io::Result<()> {
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+
+    println!("Starting b-top and b-daemon in integration mode.");
+
+    let daemon_config = config_path.clone();
+    let daemon_handle = thread::spawn(move || {
+        if let Err(e) = run_daemon_mode_silent(daemon_config) {
+            eprintln!("Background daemon error: {}", e);
+        }
+    });
+
+    thread::sleep(Duration::from_millis(500));
+
+    let result = run_process_monitor();
+
+    result
+}
+
+fn run_daemon_mode_silent(config_path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+    use daemon::DaemonSupervisor;
+
+    let mut supervisor = DaemonSupervisor::new(config_path);
+    supervisor.load_config()?;
+
+    let service_names: Vec<String> = supervisor.services.keys().cloned().collect();
+    for name in service_names {
+        let _ = supervisor.start_service(&name);
+    }
+
+    loop {
+        supervisor.check_services();
+        std::thread::sleep(Duration::from_secs(5));
+    }
+}
+
 fn run_process_monitor() -> io::Result<()> {
     let mut terminal = ratatui::init();
     let mut app_state = AppState::new();

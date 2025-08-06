@@ -414,6 +414,35 @@ pub fn run_daemon_mode(config_path: Option<PathBuf>) -> Result<(), Box<dyn std::
     }
 
     println!("Daemon supervisor started. Monitoring {} services.", supervisor.services.len());
+        println!("\n=== Service Log Locations ===");
+    for (name, service) in supervisor.services.iter() {
+        match name.as_str() {
+            // for default services only
+            "log-monitor" => {
+                println!("  {} - Monitors: /var/log/syslog (output to stdout)", name);
+            },
+            "stats-collector" => {
+                println!("  {} - Logs to: /tmp/system-stats.log", name);
+            },
+            "network-monitor" => {
+                println!("  {} - Logs to: /tmp/network.log", name);
+            },
+            _ => {
+                // for custom services, try to extract log paths from their commands
+                let command_str = format!("{} {}", service.config.command, service.config.args.join(" "));
+                if command_str.contains(">>") {
+                    if let Some(log_path) = command_str.split(">>").nth(1) {
+                        let log_path = log_path.trim().split_whitespace().next().unwrap_or("unknown");
+                        println!("  {} - Logs to: {}", name, log_path);
+                    } else {
+                        println!("  {} - Custom service (check config for details)", name);
+                    }
+                } else {
+                    println!("  {} - Custom service (check config for details)", name);
+                }
+            }
+        }
+    }
     println!("Press Ctrl+C to stop the daemon.");
 
     loop {

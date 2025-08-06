@@ -73,6 +73,18 @@ sudo mv b-top /usr/local/bin/
 ```
 ---
 ### Service Configuaration
+```
+$$\                     $$\                                                       
+$$ |                    $$ |                                                      
+$$$$$$$\           $$$$$$$ | $$$$$$\   $$$$$$\  $$$$$$\$$$$\   $$$$$$\  $$$$$$$\  
+$$  __$$\ $$$$$$\ $$  __$$ | \____$$\ $$  __$$\ $$  _$$  _$$\ $$  __$$\ $$  __$$\ 
+$$ |  $$ |\______|$$ /  $$ | $$$$$$$ |$$$$$$$$ |$$ / $$ / $$ |$$ /  $$ |$$ |  $$ |
+$$ |  $$ |        $$ |  $$ |$$  __$$ |$$   ____|$$ | $$ | $$ |$$ |  $$ |$$ |  $$ |
+$$$$$$$  |        \$$$$$$$ |\$$$$$$$ |\$$$$$$$\ $$ | $$ | $$ |\$$$$$$  |$$ |  $$ |
+\_______/          \_______| \_______| \_______|\__| \__| \__| \______/ \__|  \__|
+                                                                                  
+```                                                                                  
+                                                                                  
 
 The b-top daemon (or `b-daemon`) active and integrated modes use a TOML configuration file to define the services you want to monitor and manage, the configuration file is automatically created at `~/.config/b-top/services.toml` when you *first* run `b-top -d`. The *integrated* mode is still highly experimental, the daemon may run even when b-top is shut down. Please use it at your own risk.
 

@@ -51,7 +51,7 @@ fn main() -> io::Result<()> {
             Arg::new("integrate")
                 .short('i')
                 .long("integrate")
-                .help("Run daemon in the background while showing the process monitor (requires -d)")
+                .help("Run daemon in the background while showing the process monitor (requires -d). THIS FEATURE IS EXPERIMENTAL. IT MAY NOT SHUTDOWN WITH THE PROGRAM.")
                 .action(ArgAction::SetTrue)
                 .required(false)
         )

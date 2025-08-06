@@ -74,7 +74,7 @@ sudo mv b-top /usr/local/bin/
 ---
 ### Service Configuaration
 
-The b-top daemon (or `b-daemon`) active and integrated modes use a TOML configuration file to define the services you want to monitor and manage, the configuration file is automatically created at `~/.config/b-top/services.toml` when you *first* run `b-top -d` or `b-top -d -i`.
+The b-top daemon (or `b-daemon`) active and integrated modes use a TOML configuration file to define the services you want to monitor and manage, the configuration file is automatically created at `~/.config/b-top/services.toml` when you *first* run `b-top -d`. The *integrated* mode is still highly experimental, the daemon may run even when b-top is shut down. Please use it at your own risk.
 
 #### Configuration File Location
 - Linux/macOS: `~/.config/b-top/services.toml`

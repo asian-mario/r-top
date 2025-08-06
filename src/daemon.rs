@@ -386,6 +386,9 @@ impl DaemonSupervisor {
     }
 
     // ========================= SILENT SERVICES ============================
+    /*
+        it is used you melt
+     */
     pub fn start_service_silent(&mut self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let service = self.services.get_mut(name)
             .ok_or(format!("Service '{}' not found", name))?;

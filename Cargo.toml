@@ -14,3 +14,8 @@ sysinfo = "0.36"
 textplots = "0.8"
 
 libc = "0.2"
+
+clap = { version = "4.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.9.5"
+dirs = "6.0"

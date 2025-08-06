@@ -1,0 +1,18 @@
+[[services]]
+name = "data-processor"
+command = "/home/user/myproject/venv/bin/python"
+args = ["process_data.py", "--config", "production.yaml"]
+working_dir = "/home/user/myproject"
+restart_policy = "always"
+max_restarts = 3
+restart_delay_secs = 30
+
+[services.env_vars]
+PYTHONPATH = "/home/user/myproject"
+CONFIG_ENV = "production"
+
+[services.health_check]
+command = "test -f /tmp/processor_heartbeat && find /tmp/processor_heartbeat -mmin -2"
+interval_secs = 120
+timeout_secs = 5
+retries = 2

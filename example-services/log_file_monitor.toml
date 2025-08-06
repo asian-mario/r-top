@@ -1,0 +1,14 @@
+[[services]]
+name = "error-log-watcher"
+command = "/usr/bin/tail"
+args = ["-f", "/var/log/myapp/error.log"]
+working_dir = "/tmp"
+restart_policy = "always"
+max_restarts = 5
+restart_delay_secs = 2
+
+[services.health_check]
+command = "pgrep -f 'tail.*error.log'"
+interval_secs = 60
+timeout_secs = 5
+retries = 1

@@ -1,0 +1,13 @@
+[[services]]
+name = "redis-container"
+command = "/usr/bin/docker"
+args = ["run", "--rm", "--name", "redis-daemon", "-p", "6379:6379", "redis:alpine"]
+restart_policy = "always"
+max_restarts = 5
+restart_delay_secs = 10
+
+[services.health_check]
+command = "docker exec redis-daemon redis-cli ping | grep -q PONG"
+interval_secs = 30
+timeout_secs = 5
+retries = 2

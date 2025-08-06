@@ -15,6 +15,8 @@
 - **Keyboard Navigation**: Scroll, jump, sort, and switch interfaces with intuitive keybindings.
 - **Disk Usage**: Track disk usage with a visual gauge and switch between disks for active monitoring.
 - **Tree View**: See parent and child processes for each running/sleeping process.
+- **Search Filter**: Filter and find specific processes in the process table
+- **Daemon Supervisor**: Create your own service profiles to run a `b-daemon` in either integrated or active modes
 
 
 ---
@@ -43,6 +45,7 @@
 | `k`            | Kill selected process            |
 | `u / i`        | Switch between disks             |
 | `tab`          | Open tree view during `show_info`|
+| `/`            | Use the search filter            |
 ---
 
 ## Installation
@@ -68,6 +71,57 @@ tar -xzf b-top-linux-x86_64.tar.gz
 sudo mv b-top /usr/local/bin/
 
 ```
+---
+### Service Configuaration
+
+The b-top daemon (or `b-daemon`) active and integrated modes use a TOML configuration file to define the services you want to monitor and manage, the configuration file is automatically created at `~/.config/b-top/services.toml` when you *first* run `b-top -d` or `b-top -d -i`.
+
+#### Configuration File Location
+- Linux/macOS: `~/.config/b-top/services.toml`
+- Custom location: Use `b-top -d -c /path/to/your/config.toml`
+
+#### Basic Service Structure
+Each service is defined in the `[[services]]` array with the following fields
+```
+[[services]]
+name = "my-service"                    # Unique service name
+command = "/usr/bin/python3"           # Executable path
+args = ["app.py", "--port", "8080"]    # Command arguments
+working_dir = "/home/user/myapp"       # Optional working directory
+restart_policy = "always"             # Restart behavior: always, on_failure, never
+max_restarts = 5                       # Maximum restart attempts
+restart_delay_secs = 10                # Seconds to wait before restart
+```
+#### Restart Policies
+b-daemon has multiple restart policies depending on how you want to treat the service you are monitoring
+- `always`: Restart the service whenever it stops
+- `on_failure`: Only restart if the service exits with a non-zero status code
+- `never`: Never automatically restart the service
+
+#### Configuration Examples
+If you are struggling on how to set up your services.toml (or other custom configuration files) look at the examples within `./example-services/`
+
+#### Common Health Checks
+```
+# HTTP service health check
+curl -f http://localhost:8080/health
+
+# Process existence check
+pgrep -f "my-service"
+
+# File freshness check (modified within last 5 minutes)
+find /path/to/output -mmin -5 | grep -q output
+
+# Database connection check
+pg_isready -h localhost -p 5432
+
+# Docker container health
+docker exec container-name health-command
+
+# Log file activity (new entries in last 2 minutes)
+find /var/log/myapp.log -mmin -2 | grep -q myapp.log
+```
+
 ---
 
 ## License

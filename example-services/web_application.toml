@@ -1,0 +1,18 @@
+[[services]]
+name = "web-app"
+command = "/usr/bin/node"
+args = ["server.js"]
+working_dir = "/home/user/webapp"
+restart_policy = "always"
+max_restarts = 10
+restart_delay_secs = 5
+
+[services.env_vars]
+NODE_ENV = "production"
+PORT = "3000"
+
+[services.health_check]
+command = "curl -f http://localhost:3000/api/health"
+interval_secs = 30
+timeout_secs = 10
+retries = 2

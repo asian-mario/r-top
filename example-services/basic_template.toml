@@ -1,0 +1,20 @@
+[[services]]
+name = "my-service"                    # Unique service name
+command = "/usr/bin/python3"           # Executable path
+args = ["app.py", "--port", "8080"]    # Command arguments
+working_dir = "/home/user/myapp"       # Optional working directory
+restart_policy = "always"             # Restart behavior: always, on_failure, never
+max_restarts = 5                       # Maximum restart attempts
+restart_delay_secs = 10                # Seconds to wait before restart
+
+# Optional environment variables
+[services.env_vars]
+PORT = "8080"
+DEBUG = "true"
+
+# Optional health check configuration
+[services.health_check]
+command = "curl -f http://localhost:8080/health"
+interval_secs = 30                     # Check every 30 seconds
+timeout_secs = 5                       # Command timeout
+retries = 3                           # Failures before marking unhealthy

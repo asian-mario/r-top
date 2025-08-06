@@ -1,0 +1,14 @@
+[[services]]
+name = "db-backup"
+command = "/bin/bash"
+args = ["-c", "while true; do pg_dump mydb > /backup/db_$(date +%Y%m%d_%H%M%S).sql; sleep 3600; done"]
+working_dir = "/backup"
+restart_policy = "on_failure"
+max_restarts = 3
+restart_delay_secs = 60
+
+[services.health_check]
+command = "test -f /backup/db_$(date +%Y%m%d)*.sql"
+interval_secs = 3660  # Check slightly after expected backup time
+timeout_secs = 5
+retries = 1

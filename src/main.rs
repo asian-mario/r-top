@@ -22,6 +22,10 @@ use system_info::*;
 use app_state::*;
 use utils::CircularBuffer;
 use daemon::{run_daemon_mode, DaemonSupervisor};
+use ctrlc::*;
+
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use std::thread::{self, JoinHandle};
 
 /*
     please refrain from taking any comments that dont have proper punctuation as serious
@@ -33,6 +37,17 @@ use daemon::{run_daemon_mode, DaemonSupervisor};
     - CPU PROC CACHE
     - CPU HISTORY CIRC BUFFER
 */
+
+fn setup_signal_handler() -> Arc<AtomicBool> {
+    let shutdown_signal = Arc::new(AtomicBool::new(false));
+    let shutdown_clone = shutdown_signal.clone();
+
+    ctrlc::set_handler(move || {
+        shutdown_clone.store(true, Ordering::Relaxed);
+    }).expect("Error setting signal handler");
+
+    shutdown_signal
+}
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     eprintln!("Raw args: {:?}", args);
@@ -103,40 +118,67 @@ fn run_daemon_mode_wrapper(config_path: Option<PathBuf>) -> io::Result<()> {
 }
 
 fn run_integrated_mode(config_path: Option<PathBuf>) -> io::Result<()> {
-    use std::sync::{Arc, Mutex};
-    use std::thread;
-
     println!("Starting b-top and b-daemon in integration mode.");
 
+    let shutdown_signal = Arc::new(AtomicBool::new(false));
+    let shutdown_signal_clone = shutdown_signal.clone();
+
     let daemon_config = config_path.clone();
-    let daemon_handle = thread::spawn(move || {
-        if let Err(e) = run_daemon_mode_silent(daemon_config) {
-            eprintln!("Background daemon error: {}", e);
-        }
+    let daemon_handle: JoinHandle<Result<(), Box<dyn std::error::Error + Send>>> = thread::spawn(move || {
+        run_daemon_mode_silent(daemon_config, shutdown_signal_clone)
     });
 
     thread::sleep(Duration::from_millis(500));
 
     let result = run_process_monitor();
 
+    shutdown_signal.store(true, Ordering::Relaxed);
+
+    match daemon_handle.join() {
+        Ok(daemon_result) => {
+            if let Err(e) = daemon_result {
+                eprintln!("Daemon thread error: {}", e);
+            }
+        }
+        Err(_) => {
+            eprintln!("Failed to join daemon thread.")
+        }
+    }
+
     result
 }
 
-fn run_daemon_mode_silent(config_path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+fn run_daemon_mode_silent(config_path: Option<PathBuf>, shutdown_signal: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error + Send>> {
     use daemon::DaemonSupervisor;
 
     let mut supervisor = DaemonSupervisor::new(config_path);
-    supervisor.load_config()?;
+    supervisor.load_config().map_err(|e| -> Box<dyn std::error::Error + Send> {
+        Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+    })?;
 
     let service_names: Vec<String> = supervisor.services.keys().cloned().collect();
-    for name in service_names {
+    for name in &service_names {
         let _ = supervisor.start_service(&name);
     }
 
-    loop {
-        supervisor.check_services();
-        std::thread::sleep(Duration::from_secs(5));
+    while !shutdown_signal.load(Ordering::Relaxed) {
+        supervisor.check_services_silent();
+
+        for _ in 0..50 {
+            if shutdown_signal.load(Ordering::Relaxed) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
     }
+
+    for name in &service_names{
+        if let Err(e) = supervisor.stop_service_silent(name) {
+            eprintln!("Error stopping service '{}': {}", name, e)
+        }
+    }
+
+    Ok(())
 }
 
 fn run_process_monitor() -> io::Result<()> {

@@ -346,13 +346,45 @@ pub fn filter_processes_cached<'a>(
 
     if !app_state.search_cache_valid {
         app_state.filtered_processes.clear();
-        let query = app_state.search_query.to_lowercase();
+        let search_type = app_state.get_search_type();
+        let search_value = app_state.get_search_value().to_string();
 
-        for (index, process) in processes.iter().enumerate() {
-            let process_name = process.name().to_string_lossy().to_lowercase();
 
-            if process_name.contains(&query) {
-                app_state.filtered_processes.push(index);
+        match search_type {
+            SearchType::Name => {
+                let query = search_value.to_lowercase();
+                for (index, process) in processes.iter().enumerate() {
+                    let process_name = process.name().to_string_lossy().to_lowercase();
+                    if process_name.contains(&query) {
+                        app_state.filtered_processes.push(index);
+                    }
+                }
+            }
+            SearchType::Pid => {
+                let clean_value = search_value.trim();
+                
+                if !clean_value.is_empty() {
+                    // Try exact PID match first
+                    if let Ok(target_pid) = clean_value.parse::<u32>() {
+                        for (index, process) in processes.iter().enumerate() {
+                            if process.pid().as_u32() == target_pid {
+                                app_state.filtered_processes.push(index);
+                                break;
+                            }
+                        }
+                    } else {
+                        // If not a complete number, try partial matching
+                        // But only if it contains only digits
+                        if clean_value.chars().all(|c| c.is_ascii_digit()) {
+                            for (index, process) in processes.iter().enumerate() {
+                                let pid_str = process.pid().to_string();
+                                if pid_str.starts_with(clean_value) {
+                                    app_state.filtered_processes.push(index);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         app_state.search_cache_valid = true;

@@ -5,6 +5,7 @@ pub enum SortCategory {
     Memory,
     Network,
 }
+
 /*
 FURTHER:
     add disk i/o usage

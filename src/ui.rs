@@ -5,7 +5,7 @@ use ratatui::{prelude::*, symbols::bar::Set, widgets::*, style::*};
 use sysinfo::{System, Networks, Disks, Process};
 use crate::constants::*;
 use crate::utils::{format_bytes, CircularBuffer};
-use crate::app_state::AppState;
+use crate::app_state::{AppState, SearchType};
 use crate::system_info::{sort_and_filter_processes_cached, get_actual_process_index, get_filtered_process_count,calculate_avg_cpu_history, get_busiest_core_info, build_process_tree, get_tree_stats};
 
 pub fn render_ui(
@@ -491,10 +491,22 @@ fn render_search_bar(
 ) {
     let theme = app_state.theme_manager.current_theme();
 
-    let search_text = if app_state.search_query.is_empty() {
-        "Type to search processes...".to_string()
+    let (search_text, title) = if app_state.search_query.is_empty() {
+        ("Type to search processes... (use 'pid:1234' for PID search)".to_string(),
+        " Search Processes (ESC to exit, / to toggle) ")
     } else {
-        app_state.search_query.clone()
+        let search_type = app_state.get_search_type();
+        let search_value = app_state.get_search_value();
+
+        match search_type {
+            SearchType::Pid => {
+                (format!("pid:{}", search_value), " PID Search (ESC to exit) ")
+            }
+            SearchType::Name => {
+                (app_state.search_query.clone(), " Name Search (ESC to exit) ")
+            }
+        }
+        
     };
 
     let search_style = if app_state.search_query.is_empty() {
@@ -504,10 +516,10 @@ fn render_search_bar(
     };
 
     let search_widget = Paragraph::new(search_text)
-        .style(search_style)
+        .style(search_style) 
         .block(
             Block::default()
-                .title(" Search Processes (ESC to exit, / to toggle")
+                .title(title)
                 .title_style(Style::default().fg(theme.highlight_text))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.active_border))
@@ -622,7 +634,13 @@ fn render_flat_view(
     let title_extra = if app_state.show_info { " | Tab: Tree View" } else { "" };
 
     let search_info = if app_state.search_active {
-        format!(" | Filtered: {}/{}", current_process_count, app_state.last_process_count)
+        let search_type = app_state.get_search_type();
+        let results_count = current_process_count;
+        
+        match search_type {
+            SearchType::Pid => format!(" | PID Search: {} result(s)", results_count),
+            SearchType::Name => format!(" | Name Search: {}/{}", results_count, app_state.last_process_count),
+        }
     } else {
         String::new()
     };

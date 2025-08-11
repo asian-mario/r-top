@@ -27,6 +27,12 @@ pub struct TreeItem {
      */
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SearchType {
+    Name,
+    Pid,
+}
+
 pub struct AppState {
     pub effects: EffectManager<()>,
     pub refresh_interval: Duration,
@@ -294,7 +300,7 @@ impl AppState {
 
         match key.code {
             KeyCode::Char(c) => {
-                if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ' ') {
+                if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | ' ' | ':') {
                     self.add_search_char(c);
                     return true;
                 } else{
@@ -325,5 +331,21 @@ impl AppState {
 
         false
 
+    }
+
+    pub fn get_search_type(&self) -> SearchType {
+        if self.search_query.starts_with("pid:") {
+            SearchType::Pid
+        } else {
+            SearchType::Name
+        }
+    }
+
+    pub fn get_search_value(&self) -> &str {
+        if self.search_query.starts_with("pid:") {
+            &self.search_query[4..]
+        } else {
+            &self.search_query
+        }
     }
 }

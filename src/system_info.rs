@@ -7,6 +7,11 @@ use std::collections::HashSet;
 use std::os::unix::process;
 use crate::app_state::*;
 
+#[inline]
+pub fn bytes_to_gib(b: u64) -> f64 {
+    b as f64 / (1024.0 * 1024.0 * 1024.0)
+}
+
 // Add this struct to cache sorted processes
 pub struct ProcessCache {
     cached_processes: Vec<Pid>,
@@ -30,6 +35,57 @@ impl ProcessCache {
     }
 }
 
+/* 
+    PENDING: macOS full support -> so yes it does support UNIX-like systems but it seems like MacOS has a problem with sysinfo 
+    so ill make my own impl with mach2
+*/
+
+#[cfg(target_os = "linux")]
+pub fn memory_used_gib(system: &sysinfo::System) -> f64 {
+    let used_bytes = (system.used_memory() as u64) * 1024;
+    bytes_to_gib(used_bytes)
+}
+
+#[cfg(target_os = "macos")]
+pub fn memory_used_gib(_: &sysinfo::System) -> f64 {
+    use mach2::host::host_statistics64;
+    use mach2::kern_return::KERN_SUCCESS;
+    use mach2::mach_host::mach_host_self;
+    use mach2::message::mach_msg_type_number_t;
+    use mach2::vm_statistics::{vm_statistics64, HOST_VM_INFO64, HOST_VM_INFO64_COUNT};
+
+    unsafe {
+        let host = mach_host_self();
+        let mut count: mach_msg_type_number_t = HOST_VM_INFO64_COUNT;
+        let mut stats: vm_statistics64 = std::mem::zeroed();
+
+        let kr = host_statistics64(
+            host,
+            HOST_VM_INFO64,
+            &mut stats as *mut _ as *mut _,
+            &mut count,
+        );
+        if kr != KERN_SUCCESS {
+            return 0.0; 
+            // could fall back to sysinfo but that's essentially misreporting so no
+        }
+
+        let page_size = libc::getpagesize() as u64;
+
+        // Activity Monitor style: Active + Wired + Compressed
+        let active     = stats.active_count as u64 * page_size;
+        let wired      = stats.wire_count as u64 * page_size;
+        let compressed = stats.compressor_page_count as u64 * page_size;
+
+        bytes_to_gib(active + wired + compressed)
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+pub fn memory_used_gib(system: &sysinfo::System) -> f64 {
+    let used_bytes = (system.used_memory() as u64) * 1024;
+    bytes_to_gib(used_bytes)
+}
 pub fn update_cpu_history(cpu_history: &mut Vec<CircularBuffer<f32>>, system: &System) {
     for (i, cpu) in system.cpus().iter().enumerate() {
         if let Some(buffer) = cpu_history.get_mut(i) {

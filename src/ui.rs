@@ -6,7 +6,7 @@ use sysinfo::{System, Networks, Disks, Process};
 use crate::constants::*;
 use crate::utils::{format_bytes, CircularBuffer};
 use crate::app_state::{AppState, SearchType};
-use crate::system_info::{sort_and_filter_processes_cached, get_actual_process_index, get_filtered_process_count,calculate_avg_cpu_history, get_busiest_core_info, build_process_tree, get_tree_stats};
+use crate::system_info::{sort_and_filter_processes_cached, get_actual_process_index, get_filtered_process_count,calculate_avg_cpu_history, get_busiest_core_info, build_process_tree, get_tree_stats, memory_used_gib};
 
 pub fn render_ui(
     frame: &mut ratatui::Frame,
@@ -271,9 +271,9 @@ fn render_memory(
 ) {
     let theme = app_state.theme_manager.current_theme();
     // Memory gauge taking up 100% of the area (no spacing)
-    let used = system.used_memory() as f64 / 1024.0 / 1024.0;
-    let total = system.total_memory() as f64 / 1024.0 / 1024.0;
-    let ratio = used / total;
+    let used_gib = memory_used_gib(system);       
+    let total_gib = (system.total_memory() as f64) / 1024.0 / 1024.0; 
+    let ratio = (used_gib / total_gib).clamp(0.0, 1.0);
     let mem_color = if ratio > 0.9 {
         theme.memory_critical
     } else if ratio > 0.7 {
@@ -292,7 +292,7 @@ fn render_memory(
         .set_style(Style::default().fg(theme.secondary_border))
         .gauge_style(Style::default().fg(mem_color).bg(theme.gauge_background))
         .ratio(ratio)
-        .label(format!("{:.2} / {:.2} GiB", used / 1024.0, total / 1024.0));
+        .label(format!("{:.2} / {:.2} GiB", used_gib / 1024.0, total_gib / 1024.0));
 
     frame.render_widget(memory_gauge, area);
 }

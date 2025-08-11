@@ -292,7 +292,7 @@ fn render_memory(
         .set_style(Style::default().fg(theme.secondary_border))
         .gauge_style(Style::default().fg(mem_color).bg(theme.gauge_background))
         .ratio(ratio)
-        .label(format!("{:.2} / {:.2} GB", used / 1024.0, total / 1024.0));
+        .label(format!("{:.2} / {:.2} GiB", used / 1024.0, total / 1024.0));
 
     frame.render_widget(memory_gauge, area);
 }

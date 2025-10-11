@@ -52,14 +52,14 @@ fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     eprintln!("Raw args: {:?}", args);
 
-    let matches = ClapCommand::new("b-top")
+    let matches = ClapCommand::new("r-top")
         .version("0.2.5")
-        .about("b-top is a tui system monitor written in Rust with an extended daemon supervisor.")
+        .about("r-top is a tui system monitor written in Rust with an extended daemon supervisor.")
         .arg(
             Arg::new("daemon")
                 .short('d')
                 .long("daemon")
-                .help("Run b-top in daemon mode, which will run the daemon supervisor in the background.")
+                .help("Run r-top in daemon mode, which will run the daemon supervisor in the background.")
                 .action(clap::ArgAction::SetTrue),
         )
         .arg(
@@ -91,7 +91,7 @@ fn main() -> io::Result<()> {
 
     if integrate_mode && !daemon_mode {
         println!("Error: --integrate (-i) requires --daemon (-d)");
-        println!("Usage: b-top -d -i");
+        println!("Usage: r-top -d -i");
         std::process::exit(1);
     }
 
@@ -118,7 +118,7 @@ fn run_daemon_mode_wrapper(config_path: Option<PathBuf>) -> io::Result<()> {
 }
 
 fn run_integrated_mode(config_path: Option<PathBuf>) -> io::Result<()> {
-    println!("Starting b-top and b-daemon in integration mode.");
+    println!("Starting r-top and b-daemon in integration mode.");
 
     let shutdown_signal = Arc::new(AtomicBool::new(false));
     let shutdown_signal_clone = shutdown_signal.clone();

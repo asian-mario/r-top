@@ -1,4 +1,4 @@
-# r-top (bad-top)
+# r-top
 
 **r-top** is a terminal-based, Rust-powered system resource viewer for UNIX-like systems. Inspired by tools like `bashtop` and `htop`, `b-top` provides a visually impressive process monitoring and management tool with shader-like implementations by using TachyonFX.
 

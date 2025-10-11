@@ -1,6 +1,6 @@
-# b-top (bad-top)
+# r-top (bad-top)
 
-**b-top** (short for **bad-top**) is a terminal-based, Rust-powered system resource viewer for UNIX-like systems. Inspired by tools like `bashtop` and `htop`, `b-top` provides a visually impressive process monitoring and management tool with shader-like implementations by using TachyonFX.
+**r-top** is a terminal-based, Rust-powered system resource viewer for UNIX-like systems. Inspired by tools like `bashtop` and `htop`, `b-top` provides a visually impressive process monitoring and management tool with shader-like implementations by using TachyonFX.
 
 ---
 
@@ -58,17 +58,17 @@
 ### Build and Run
 
 ```bash
-git clone https://github.com/asian-mario/b-top.git
-cd b-top
+git clone https://github.com/asian-mario/r-top.git
+cd r-top
 cargo run --release
 ```
 
 ---
-### Downloading b-top
+### Downloading r-top
 ```bash
-wget https://github.com/asian-mario/b-top/releases/download/[VERSION]/b-top-linux-x86_64.tar.gz
-tar -xzf b-top-linux-x86_64.tar.gz
-sudo mv b-top /usr/local/bin/
+wget https://github.com/asian-mario/r-top/releases/download/[VERSION]/r-top-linux-x86_64.tar.gz
+tar -xzf r-top-linux-x86_64.tar.gz
+sudo mv r-top /usr/local/bin/
 
 ```
 ---
@@ -86,11 +86,11 @@ $$$$$$$  |        \$$$$$$$ |\$$$$$$$ |\$$$$$$$\ $$ | $$ | $$ |\$$$$$$  |$$ |  $$
 ```                                                                                  
                                                                                   
 
-The b-top daemon (or `b-daemon`) active and integrated modes use a TOML configuration file to define the services you want to monitor and manage, the configuration file is automatically created at `~/.config/b-top/services.toml` when you *first* run `b-top -d`. The *integrated* mode is still highly experimental, the daemon may run even when b-top is shut down. Please use it at your own risk.
+The r-top daemon (or `b-daemon`) active and integrated modes use a TOML configuration file to define the services you want to monitor and manage, the configuration file is automatically created at `~/.config/r-top/services.toml` when you *first* run `r-top -d`. The *integrated* mode is still highly experimental, the daemon may run even when r-top is shut down. Please use it at your own risk.
 
 #### Configuration File Location
-- Linux/macOS: `~/.config/b-top/services.toml`
-- Custom location: Use `b-top -d -c /path/to/your/config.toml`
+- Linux/macOS: `~/.config/r-top/services.toml`
+- Custom location: Use `r-top -d -c /path/to/your/config.toml`
 
 #### Basic Service Structure
 Each service is defined in the `[[services]]` array with the following fields

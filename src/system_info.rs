@@ -101,7 +101,8 @@ pub fn update_cpu_history(cpu_history: &mut Vec<CircularBuffer<f32>>, system: &S
 pub fn sort_processes_cached<'a>(
     system: &'a System, 
     sort_category: &SortCategory,
-    cache: &mut ProcessCache
+    cache: &mut ProcessCache,
+    search_active: &bool
 ) -> Vec<&'a Process> {
     let current_process_count = system.processes().len();
     
@@ -179,10 +180,12 @@ pub fn sort_processes_cached<'a>(
                     break;
                 }
             }
-
-            if needs_full_resort {
-                cache.invalidate();
-                return sort_processes_cached(system, sort_category, cache);
+            
+            if !search_active{
+                if needs_full_resort {
+                    cache.invalidate();
+                    return sort_processes_cached(system, sort_category, cache, search_active);
+                }
             }
         }
     }
@@ -473,7 +476,7 @@ pub fn sort_and_filter_processes_cached<'a>(
     system: &'a System,
     app_state: &mut AppState,
 ) -> Vec<&'a Process> {
-    let sorted_processes = sort_processes_cached(system, &app_state.sort_category, &mut app_state.process_cache);
+    let sorted_processes = sort_processes_cached(system, &app_state.sort_category, &mut app_state.process_cache, &app_state.search_active);
 
     filter_processes_cached(system, &sorted_processes, app_state)
 }

@@ -215,7 +215,7 @@ fn run_process_monitor() -> io::Result<()> {
         }
 
         update_cpu_history(&mut cpu_history, &system);
-        let processes = sort_processes_cached(&system, &app_state.sort_category, &mut app_state.process_cache);
+        let processes = sort_processes_cached(&system, &app_state.sort_category, &mut app_state.process_cache, &app_state.search_active);
         
         terminal.draw(|frame| {
             app_state.update_terminal_area(frame.size());  //-> should i seperate this from render_ui?

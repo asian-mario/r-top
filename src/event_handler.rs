@@ -152,7 +152,7 @@ pub fn handle_key_event(
                 app_state.get_selected_tree_item().map(|item| item.pid.as_u32() as i32)
             } else {
                 let actual_process = if app_state.search_active && !app_state.is_search_empty() {
-                    let sorted_processes = sort_processes_cached(system, &app_state.sort_category, &mut app_state.process_cache);
+                    let sorted_processes = sort_processes_cached(system, &app_state.sort_category, &mut app_state.process_cache, &app_state.search_active);
                     filter_processes_cached(system, &sorted_processes, app_state)
                 } else {
                     processes.clone()

@@ -2,6 +2,7 @@ use std::os::unix::process;
 use std::thread::current;
 use std::{time::Duration};
 use ratatui::{prelude::*, symbols::bar::Set, widgets::*, style::*};
+// NOTE: no explicit ratatui::text imports needed; we'll write into the buffer directly
 use sysinfo::{System, Networks, Disks, Process};
 use crate::constants::*;
 use crate::utils::{format_bytes, CircularBuffer};
@@ -46,6 +47,77 @@ pub fn render_ui(
         frame.buffer_mut(),
         area,
     );
+
+    if app_state.pause_overlay {
+
+        let buf = frame.buffer_mut();
+        let start_x = area.x;
+        let start_y = area.y;
+        let end_x = area.x + area.width;
+        let end_y = area.y + area.height;
+
+        for y in start_y..end_y {
+            for x in start_x..end_x {
+                let cell = buf.get_mut(x, y);
+                cell.set_style(Style::default().fg(Color::DarkGray).bg(Color::Black));
+            }
+        }
+
+        let title = r#"
+                $$\                         
+                $$ |                        
+$$$$$$\         $$$$$$\    $$$$$$\   $$$$$$\  
+$$  __$$\ $$$$$$\\_$$  _|  $$  __$$\ $$  __$$\ 
+$$ |  \__|\______| $$ |    $$ /  $$ |$$ /  $$ |
+$$ |               $$ |$$\ $$ |  $$ |$$ |  $$ |
+$$ |               \$$$$  |\$$$$$$  |$$$$$$$  |
+\__|                \____/  \______/ $$  ____/ 
+                                    $$ |      
+                                    $$ |      
+                                    \__|      
+        "#;
+
+        let title_trimmed = title.trim_matches('\n');
+        let num_lines = title_trimmed.lines().count() as u16;
+        let title_height = std::cmp::min(num_lines, area.height);
+
+        let bright_style = Style::default()
+            .fg(Color::Red)
+            .bg(Color::Black)
+            .add_modifier(Modifier::BOLD);
+
+        let title_start_y = area.y + (area.height.saturating_sub(title_height) / 4);
+
+        for (i, line) in title_trimmed.lines().enumerate() {
+            let y = title_start_y.saturating_add(i as u16);
+            if y >= area.y + area.height {
+                break;
+            }
+
+            // center the line horizontally within the area
+            let line_width = line.chars().count() as u16;
+            let x_start = if area.width > line_width {
+                area.x + ((area.width - line_width) / 2)
+            } else {
+                area.x
+            };
+
+            let mut x = x_start;
+            for ch in line.chars() {
+                if x >= area.x + area.width {
+                    break;
+                }
+
+                if ch != ' ' {
+                    let cell = buf.get_mut(x, y);
+                    cell.set_char(ch);
+                    cell.set_style(bright_style);
+                }
+
+                x = x.saturating_add(1);
+            }
+        }
+    }
 }
 
 fn render_cpu_section(

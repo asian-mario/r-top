@@ -14,6 +14,11 @@ pub fn handle_key_event(
     system: &System, //-> yes i know its not used since we already have appstate, but i'm using this as a fallback incase I need to make some quick tests
     processes: &Vec<&Process>
 ) -> io::Result<bool> {
+    if let KeyCode::Char('z') = key.code {
+        app_state.toggle_pause_overlay();
+        return Ok(false);
+    }
+
     if app_state.handle_search_input(key) {
         return Ok(false);
     }

@@ -53,7 +53,7 @@ fn main() -> io::Result<()> {
     eprintln!("Raw args: {:?}", args);
 
     let matches = ClapCommand::new("r-top")
-        .version("0.2.5")
+        .version("0.2.6")
         .about("r-top is a tui system monitor written in Rust with an extended daemon supervisor.")
         .arg(
             Arg::new("daemon")

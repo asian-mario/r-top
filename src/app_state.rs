@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 use ratatui::layout::Rect;
 use ratatui::widgets::Row;
 use tachyonfx::EffectManager;
+
 use crate::theme::{Theme, ThemeManager};
 use crate::types::SortCategory;
 use crate::constants::SWEEP_DURATION_MS;
@@ -35,6 +36,7 @@ pub enum SearchType {
 
 pub struct AppState {
     pub effects: EffectManager<()>,
+    pub pause_overlay: bool,
     pub refresh_interval: Duration,
     pub selected_process: usize,
     pub sort_category: SortCategory,
@@ -81,6 +83,7 @@ pub struct AppState {
     pub search_cache_valid: bool,
 }
 
+
 impl AppState {
     pub fn new() -> Self {
         let mut effects: EffectManager<()> = EffectManager::default();
@@ -88,6 +91,7 @@ impl AppState {
         
         Self {
             effects,
+            pause_overlay: false,
             refresh_interval: Duration::from_millis(2000),
             selected_process: 0,
             sort_category: SortCategory::CpuPerCore,
@@ -263,6 +267,10 @@ impl AppState {
         }
 
         self.invalidate_rows_cache();
+    }
+
+    pub fn toggle_pause_overlay(&mut self) {
+        self.pause_overlay = !self.pause_overlay;
     }
 
     pub fn add_search_char(&mut self, c: char){

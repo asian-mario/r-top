@@ -4,6 +4,7 @@ use std::{time::Duration};
 use ratatui::{prelude::*, symbols::bar::Set, widgets::*, style::*};
 // NOTE: no explicit ratatui::text imports needed; we'll write into the buffer directly
 use sysinfo::{System, Networks, Disks, Process};
+use tachyonfx::{fx};
 use crate::constants::*;
 use crate::utils::{format_bytes, CircularBuffer};
 use crate::app_state::{AppState, SearchType};
@@ -82,7 +83,7 @@ $$ |               \$$$$  |\$$$$$$  |$$$$$$$  |
         let title_height = std::cmp::min(num_lines, area.height);
 
         let bright_style = Style::default()
-            .fg(Color::Red)
+            .fg(Color::LightYellow)
             .bg(Color::Black)
             .add_modifier(Modifier::BOLD);
 
@@ -118,6 +119,71 @@ $$ |               \$$$$  |\$$$$$$  |$$$$$$$  |
             }
         }
     }
+
+    // Render popup last so it overlays everything
+    if app_state.popup_visible {
+        render_popup(frame, app_state, area);
+    }
+}
+
+fn render_popup(frame: &mut ratatui::Frame, app_state: &AppState, area: Rect) {
+    let theme = app_state.theme_manager.current_theme();
+    
+    // Calculate popup size - make it large enough for the error message
+    let popup_width = area.width.saturating_sub(10).min(80);
+    let popup_height = 12; // Enough for error message + buttons
+    
+    let popup_x = area.x + (area.width.saturating_sub(popup_width)) / 2;
+    let popup_y = area.y + (area.height.saturating_sub(popup_height)) / 2;
+    
+    let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+    
+    // Clear the popup area completely with full black background
+    let buf = frame.buffer_mut();
+    for y in popup_area.y..popup_area.y + popup_area.height {
+        for x in popup_area.x..popup_area.x + popup_area.width {
+            if x < area.x + area.width && y < area.y + area.height {
+                let cell = buf.get_mut(x, y);
+                cell.set_char(' ');
+                cell.set_style(Style::default().fg(Color::Black).bg(Color::Black));
+            }
+        }
+    }
+    
+    // Create the popup block
+    let block = Block::default()
+        .title(" ⚠ Error ")
+        .title_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Red))
+        .style(Style::default().bg(Color::Black));
+    
+    let inner_area = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+    
+    // Split inner area for message and buttons
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(5),      // Message area
+            Constraint::Length(3),   // Button area
+        ])
+        .split(inner_area);
+    
+    // Render the error message
+    let message = Paragraph::new(app_state.popup_message.as_str())
+        .style(Style::default().fg(Color::White))
+        .wrap(Wrap { trim: true })
+        .alignment(Alignment::Left);
+    
+    frame.render_widget(message, chunks[0]);
+    
+    // Render dismiss instructions
+    let instructions = Paragraph::new("Press Y/N or Enter/Esc to dismiss")
+        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC))
+        .alignment(Alignment::Center);
+    
+    frame.render_widget(instructions, chunks[1]);
 }
 
 fn render_cpu_section(

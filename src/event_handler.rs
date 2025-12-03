@@ -14,7 +14,21 @@ pub fn handle_key_event(
     system: &System, //-> yes i know its not used since we already have appstate, but i'm using this as a fallback incase I need to make some quick tests
     processes: &Vec<&Process>
 ) -> io::Result<bool> {
+    // Handle popup dismissal first
+    if app_state.popup_visible {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Enter | KeyCode::Esc => {
+                app_state.dismiss_popup();
+                return Ok(false);
+            }
+            _ => return Ok(false), // Ignore other keys when popup is visible
+        }
+    }
+
     if let KeyCode::Char('z') = key.code {
+        app_state.effects.add_effect(
+            fx::fade_from(Color::Black, Color::White, 100).with_area(app_state.terminal_area)
+        );
         app_state.toggle_pause_overlay();
         return Ok(false);
     }
@@ -136,10 +150,14 @@ pub fn handle_key_event(
         }
 
         KeyCode::Char('o') => {
-            change_process_priority(processes, app_state.selected_process, "5");
+            if let Err(err) = change_process_priority(processes, app_state.selected_process, "5") {
+                app_state.show_popup(err);
+            }
         }
         KeyCode::Char('p') => {
-            change_process_priority(processes, app_state.selected_process, "-5");
+            if let Err(err) = change_process_priority(processes, app_state.selected_process, "-5") {
+                app_state.show_popup(err);
+            }
         }
 
         KeyCode::Char('u') => {
@@ -214,13 +232,27 @@ fn add_sweep_effect(effects: &mut tachyonfx::EffectManager<()>, area: ratatui::l
     );
 }
 
-fn change_process_priority(processes: &Vec<&Process>, selected_process: usize, nice_value: &str) {
+fn change_process_priority(processes: &Vec<&Process>, selected_process: usize, nice_value: &str) -> Result<(), String> {
     if let Some(proc) = processes.get(selected_process) {
-        let _ = std::process::Command::new("renice")
+        let output = std::process::Command::new("renice")
             .arg("-n")
             .arg(nice_value)
             .arg("-p")
             .arg(proc.pid().to_string())
-            .status();
+            .output()
+            .map_err(|e| format!("Failed to execute renice: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "Permission denied: Failed to change process priority.\n\n\
+                Error: {}\n\n\
+                Try running r-top with sudo:\n  sudo r-top",
+                stderr.trim()
+            ));
+        }
+        Ok(())
+    } else {
+        Err("Process not found".to_string())
     }
 }

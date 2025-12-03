@@ -81,6 +81,10 @@ pub struct AppState {
     pub search_query: String,
     pub filtered_processes: Vec<usize>,
     pub search_cache_valid: bool,
+
+    // Popup for errors/warnings
+    pub popup_visible: bool,
+    pub popup_message: String,
 }
 
 
@@ -131,6 +135,10 @@ impl AppState {
             search_query: String::new(),
             filtered_processes: Vec::new(),
             search_cache_valid: false,
+
+            // Popup
+            popup_visible: false,
+            popup_message: String::new(),
 
         }
     }
@@ -355,5 +363,15 @@ impl AppState {
         } else {
             &self.search_query
         }
+    }
+
+    pub fn show_popup(&mut self, message: String) {
+        self.popup_visible = true;
+        self.popup_message = message;
+    }
+
+    pub fn dismiss_popup(&mut self) {
+        self.popup_visible = false;
+        self.popup_message.clear();
     }
 }

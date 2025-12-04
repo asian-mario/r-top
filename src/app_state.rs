@@ -85,6 +85,9 @@ pub struct AppState {
     // Popup for errors/warnings
     pub popup_visible: bool,
     pub popup_message: String,
+
+    // Pause menu
+    pub pause_menu_selected: usize,
 }
 
 
@@ -139,6 +142,9 @@ impl AppState {
             // Popup
             popup_visible: false,
             popup_message: String::new(),
+
+            // Pause menu
+            pause_menu_selected: 0,
 
         }
     }
@@ -373,5 +379,21 @@ impl AppState {
     pub fn dismiss_popup(&mut self) {
         self.popup_visible = false;
         self.popup_message.clear();
+    }
+
+    pub fn pause_menu_up(&mut self) {
+        if self.pause_menu_selected > 0 {
+            self.pause_menu_selected -= 1;
+        }
+    }
+
+    pub fn pause_menu_down(&mut self) {
+        if self.pause_menu_selected < 2 {
+            self.pause_menu_selected += 1;
+        }
+    }
+
+    pub fn reset_pause_menu(&mut self) {
+        self.pause_menu_selected = 0;
     }
 }

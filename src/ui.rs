@@ -60,7 +60,8 @@ pub fn render_ui(
         for y in start_y..end_y {
             for x in start_x..end_x {
                 let cell = buf.get_mut(x, y);
-                cell.set_style(Style::default().fg(Color::DarkGray).bg(Color::Black));
+                cell.set_char(' ');
+                cell.set_style(Style::default().fg(Color::Black).bg(Color::Black));
             }
         }
 
@@ -83,7 +84,7 @@ $$ |               \$$$$  |\$$$$$$  |$$$$$$$  |
         let title_height = std::cmp::min(num_lines, area.height);
 
         let bright_style = Style::default()
-            .fg(Color::LightYellow)
+            .fg(Color::Red)
             .bg(Color::Black)
             .add_modifier(Modifier::BOLD);
 
@@ -118,11 +119,76 @@ $$ |               \$$$$  |\$$$$$$  |$$$$$$$  |
                 x = x.saturating_add(1);
             }
         }
+
+        // Render pause menu options
+        render_pause_menu(app_state, area, buf);
     }
 
     // Render popup last so it overlays everything
     if app_state.popup_visible {
         render_popup(frame, app_state, area);
+    }
+}
+
+fn render_pause_menu(app_state: &AppState, area: Rect, buf: &mut ratatui::buffer::Buffer) {
+    let menu_options = [
+        "THEME",
+        "R-TOP SETTINGS",
+        "EXIT",
+    ];
+
+    let arrow = ">>>";
+    
+    // Calculate starting Y position for menu (below ASCII art)
+    let menu_start_y = area.y + (area.height / 2) + 5;
+    
+    for (i, option) in menu_options.iter().enumerate() {
+        let y = menu_start_y + (i as u16 * 2);
+        
+        if y >= area.y + area.height {
+            break;
+        }
+        
+        // Determine if this option is selected
+        let is_selected = i == app_state.pause_menu_selected;
+        
+        // Build the line with arrow if selected
+        let line = if is_selected {
+            format!("{} {}", arrow, option)
+        } else {
+            format!("    {}", option)
+        };
+        
+        let line_width = line.chars().count() as u16;
+        let x_start = if area.width > line_width {
+            area.x + ((area.width - line_width) / 2)
+        } else {
+            area.x
+        };
+        
+        let style = if is_selected {
+            Style::default()
+                .fg(Color::Yellow)
+                .bg(Color::Black)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .fg(Color::White)
+                .bg(Color::Black)
+        };
+        
+        let mut x = x_start;
+        for ch in line.chars() {
+            if x >= area.x + area.width {
+                break;
+            }
+            
+            let cell = buf.get_mut(x, y);
+            cell.set_char(ch);
+            cell.set_style(style);
+            
+            x = x.saturating_add(1);
+        }
     }
 }
 

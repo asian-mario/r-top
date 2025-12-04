@@ -30,7 +30,47 @@ pub fn handle_key_event(
             fx::fade_from(Color::Black, Color::White, 100).with_area(app_state.terminal_area)
         );
         app_state.toggle_pause_overlay();
+        if !app_state.pause_overlay {
+            app_state.reset_pause_menu();
+        }
         return Ok(false);
+    }
+
+    // Handle pause menu navigation
+    if app_state.pause_overlay {
+        match key.code {
+            KeyCode::Up => {
+                app_state.pause_menu_up();
+                return Ok(false);
+            }
+            KeyCode::Down => {
+                app_state.pause_menu_down();
+                return Ok(false);
+            }
+            KeyCode::Enter => {
+                // Handle menu selection
+                match app_state.pause_menu_selected {
+                    0 => {
+                        // THEME
+                        app_state.switch_theme();
+                        app_state.toggle_pause_overlay();
+                        app_state.reset_pause_menu();
+                    }
+                    1 => {
+                        // R-TOP SETTINGS (placeholder for now)
+                        app_state.toggle_pause_overlay();
+                        app_state.reset_pause_menu();
+                    }
+                    2 => {
+                        // EXIT
+                        return Ok(true);
+                    }
+                    _ => {}
+                }
+                return Ok(false);
+            }
+            _ => return Ok(false), // Ignore other keys in pause menu
+        }
     }
 
     if app_state.handle_search_input(key) {

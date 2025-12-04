@@ -43,6 +43,7 @@ pub struct AppState {
     pub current_interface: &'static str,
     pub show_info: bool,
     pub current_disk_index: usize,
+    pub current_gpu_index: usize,
     pub scroll_offset: usize,
     pub visible_rows: usize,
     pub switch_interface_at: Instant,
@@ -88,6 +89,14 @@ pub struct AppState {
 
     // Pause menu
     pub pause_menu_selected: usize,
+
+    // Theme panel
+    pub theme_panel_visible: bool,
+    pub theme_selected_index: usize,
+
+    // GPU cache
+    pub gpu_info_cache: Vec<crate::system_info::GpuInfo>,
+    pub gpu_cache_last_update: Instant,
 }
 
 
@@ -105,6 +114,7 @@ impl AppState {
             current_interface: "eth0",
             show_info: false,
             current_disk_index: 0,
+            current_gpu_index: 0,
             scroll_offset: 0,
             visible_rows: 0,
             switch_interface_at: Instant::now() + Duration::from_millis(SWEEP_DURATION_MS),
@@ -146,6 +156,13 @@ impl AppState {
             // Pause menu
             pause_menu_selected: 0,
 
+            // Theme panel
+            theme_panel_visible: false,
+            theme_selected_index: 0,
+
+            // GPU cache (will be populated on first render)
+            gpu_info_cache: Vec::new(),
+            gpu_cache_last_update: Instant::now(),
         }
     }
     // methods to for tree shit
@@ -251,6 +268,26 @@ impl AppState {
     pub fn next_disk(&mut self, max_disks: usize) {
         if self.current_disk_index + 1 < max_disks {
             self.current_disk_index += 1;
+        }
+    }
+
+    pub fn previous_gpu(&mut self) {
+        if self.current_gpu_index > 0 {
+            self.current_gpu_index -= 1;
+        }
+    }
+
+    pub fn next_gpu(&mut self, max_gpus: usize) {
+        if self.current_gpu_index + 1 < max_gpus {
+            self.current_gpu_index += 1;
+        }
+    }
+
+    pub fn update_gpu_cache_if_needed(&mut self) {
+        // Only update GPU info every 5 seconds to avoid performance hit
+        if self.gpu_info_cache.is_empty() || self.gpu_cache_last_update.elapsed() > Duration::from_secs(5) {
+            self.gpu_info_cache = crate::system_info::get_gpu_info();
+            self.gpu_cache_last_update = Instant::now();
         }
     }
 
@@ -379,6 +416,28 @@ impl AppState {
     pub fn dismiss_popup(&mut self) {
         self.popup_visible = false;
         self.popup_message.clear();
+    }
+
+    // Theme panel controls
+    pub fn open_theme_panel(&mut self) {
+        self.theme_panel_visible = true;
+        self.theme_selected_index = 0;
+    }
+
+    pub fn close_theme_panel(&mut self) {
+        self.theme_panel_visible = false;
+    }
+
+    pub fn theme_panel_up(&mut self) {
+        if self.theme_selected_index > 0 {
+            self.theme_selected_index -= 1;
+        }
+    }
+
+    pub fn theme_panel_down(&mut self) {
+        if self.theme_selected_index < 2 {
+            self.theme_selected_index += 1;
+        }
     }
 
     pub fn pause_menu_up(&mut self) {

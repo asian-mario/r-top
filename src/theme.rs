@@ -96,7 +96,7 @@ impl Theme {
 
             primary_text: Color::Rgb(220, 220, 220),
             secondary_text: Color::Rgb(140, 140, 140),
-            highlight_text: Color::Rgb(180, 180, 180),
+            highlight_text: Color::Rgb(190, 190, 250),
             warning_text: Color::Rgb(160, 160, 160),
             error_text: Color::Rgb(200, 200, 200),
 
@@ -213,6 +213,19 @@ impl ThemeManager {
             ThemeType::Monotone => Theme::monotone(),
             ThemeType::HighContrast => Theme::high_contrast(),
         };
+    }
+
+    pub fn set_theme(&mut self, theme_type: ThemeType) {
+        self.current_theme_type = theme_type;
+        self.current_theme = match theme_type {
+            ThemeType::DarkPurple => Theme::dark_purple(),
+            ThemeType::Monotone => Theme::monotone(),
+            ThemeType::HighContrast => Theme::high_contrast(),
+        };
+    }
+
+    pub fn list_theme_types(&self) -> [ThemeType; 3] {
+        [ThemeType::DarkPurple, ThemeType::Monotone, ThemeType::HighContrast]
     }
 
     pub fn current_theme(&self) -> &Theme {

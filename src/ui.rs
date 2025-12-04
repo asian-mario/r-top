@@ -88,7 +88,8 @@ $$ |               \$$$$  |\$$$$$$  |$$$$$$$  |
             .bg(Color::Black)
             .add_modifier(Modifier::BOLD);
 
-        let title_start_y = area.y + (area.height.saturating_sub(title_height) / 4);
+        // Center the ASCII art vertically within the full frame area
+        let title_start_y = area.y + (area.height.saturating_sub(title_height) / 2);
 
         for (i, line) in title_trimmed.lines().enumerate() {
             let y = title_start_y.saturating_add(i as u16);
@@ -120,17 +121,23 @@ $$ |               \$$$$  |\$$$$$$  |$$$$$$$  |
             }
         }
 
-        // Render pause menu options
-        render_pause_menu(app_state, area, buf);
+        // Render pause menu options positioned just below the ASCII art
+        let after_title_y = title_start_y.saturating_add(title_height);
+        render_pause_menu(app_state, area, buf, after_title_y);
     }
 
     // Render popup last so it overlays everything
     if app_state.popup_visible {
         render_popup(frame, app_state, area);
     }
+
+    // Render theme panel over everything when visible
+    if app_state.theme_panel_visible {
+        render_theme_panel(frame, app_state, area);
+    }
 }
 
-fn render_pause_menu(app_state: &AppState, area: Rect, buf: &mut ratatui::buffer::Buffer) {
+fn render_pause_menu(app_state: &AppState, area: Rect, buf: &mut ratatui::buffer::Buffer, after_title_y: u16) {
     let menu_options = [
         "THEME",
         "R-TOP SETTINGS",
@@ -139,8 +146,9 @@ fn render_pause_menu(app_state: &AppState, area: Rect, buf: &mut ratatui::buffer
 
     let arrow = ">>>";
     
-    // Calculate starting Y position for menu (below ASCII art)
-    let menu_start_y = area.y + (area.height / 2) + 5;
+    // Calculate starting Y position for menu (just below ASCII art)
+    let gap = 2;
+    let menu_start_y = after_title_y.saturating_add(gap).min(area.y + area.height);
     
     for (i, option) in menu_options.iter().enumerate() {
         let y = menu_start_y + (i as u16 * 2);
@@ -256,9 +264,11 @@ fn render_cpu_section(
     frame: &mut ratatui::Frame,
     system: &System,
     cpu_history: &Vec<CircularBuffer<f32>>,
-    app_state: &AppState,
+    app_state: &mut AppState,
     area: Rect,
 ) {
+    // Update GPU cache before any borrowing
+    app_state.update_gpu_cache_if_needed();
     let theme = app_state.theme_manager.current_theme();
     /*
     FOR SOME REASON! before the refactor 70/30 was FINE! it displayed all the things in CPU info but now its not?? I don't want to tweak this b.s again because
@@ -367,34 +377,42 @@ fn render_cpu_section(
 
     frame.render_widget(graph, right_chunks[0]);
 
-    // CPU Info
-    let cpu_info = &system.cpus()[0];
-    let logical_threads = system.cpus().len();
-    let physical_cores = System::physical_core_count().unwrap_or(logical_threads);
-    let current_speed = cpu_info.frequency();
+    // GPU Info (use cached data - already updated at function start)
+    let gpu_index = app_state.current_gpu_index.min(app_state.gpu_info_cache.len().saturating_sub(1));
+    let gpu = &app_state.gpu_info_cache[gpu_index];
 
-    let cpu_info_text = format!(
+    let gpu_title = if app_state.gpu_info_cache.len() > 1 {
+        format!(" GPU Info ({}/{}) - Use g/G to cycle ", gpu_index + 1, app_state.gpu_info_cache.len())
+    } else {
+        " GPU Info ".to_string()
+    };
+
+    let gpu_info_text = format!(
         "Model: {}\n\
-        Physical Cores:  {}\n\
-        Logical Threads: {}\n\
-        Base Clock Speed: {} MHz",
-        cpu_info.brand(),
-        physical_cores,
-        logical_threads,
-        current_speed
+        Driver: {}\n\
+        Memory Total: {}\n\
+        Memory Used:  {}\n\
+        Temperature:  {}\n\
+        Utilization:  {}",
+        gpu.name,
+        gpu.driver_version,
+        gpu.memory_total,
+        gpu.memory_used,
+        gpu.temperature,
+        gpu.utilization
     );
 
-    let cpu_info_paragraph = Paragraph::new(cpu_info_text)
+    let gpu_info_paragraph = Paragraph::new(gpu_info_text)
         .style(Style::default().fg(theme.secondary_text))
         .block(
             Block::default()
-                .title(" CPU Info ")
+                .title(gpu_title)
                 .title_style(Style::default().fg(theme.primary_text))
                 .borders(Borders::ALL),
         )
         .wrap(Wrap { trim: false });
 
-    frame.render_widget(cpu_info_paragraph, right_chunks[1]);
+    frame.render_widget(gpu_info_paragraph, right_chunks[1]);
 }
 
 fn render_cpu_average(
@@ -980,4 +998,74 @@ fn render_processes(
 
     app_state.info_area = area;
     frame.render_widget(table, area);
+}
+
+fn render_theme_panel(frame: &mut ratatui::Frame, app_state: &AppState, area: Rect) {
+    let panel_width = area.width.saturating_sub(12).min(60);
+    let panel_height = 10;
+    let x = area.x + (area.width.saturating_sub(panel_width)) / 2;
+    let y = area.y + (area.height.saturating_sub(panel_height)) / 2;
+    let panel_area = Rect::new(x, y, panel_width, panel_height);
+
+    // Opaque background
+    // Render block first, then draw into buffer
+    for yy in panel_area.y..panel_area.y + panel_area.height {
+        for xx in panel_area.x..panel_area.x + panel_area.width {
+            // We'll clear after rendering block using frame.buffer_mut()
+        }
+    }
+
+    let block = Block::default()
+        .title(" Theme Selection ")
+        .title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .style(Style::default().bg(Color::Black));
+
+    frame.render_widget(&block, panel_area);
+    let inner = block.inner(panel_area);
+
+    let buf = frame.buffer_mut();
+    for yy in inner.y..inner.y + inner.height {
+        for xx in inner.x..inner.x + inner.width {
+            let cell = buf.get_mut(xx, yy);
+            cell.set_char(' ');
+            cell.set_style(Style::default().fg(Color::Black).bg(Color::Black));
+        }
+    }
+
+    let themes = app_state.theme_manager.list_theme_types();
+    let names: Vec<&str> = themes.iter().map(|t| t.as_str()).collect();
+
+    // Render options centered
+    for (i, name) in names.iter().enumerate() {
+        let y = inner.y + i as u16;
+        if y >= inner.y + inner.height { break; }
+        let line = if i == app_state.theme_selected_index { format!(">>> {}", name) } else { format!("    {}", name) };
+        let line_width = line.chars().count() as u16;
+        let x_start = if inner.width > line_width { inner.x + (inner.width - line_width) / 2 } else { inner.x };
+        let style = if i == app_state.theme_selected_index { Style::default().fg(Color::Yellow).bg(Color::Black).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::White).bg(Color::Black) };
+        let mut xx = x_start;
+        for ch in line.chars() {
+            if xx >= inner.x + inner.width { break; }
+            let cell = buf.get_mut(xx, y);
+            cell.set_char(ch);
+            cell.set_style(style);
+            xx = xx.saturating_add(1);
+        }
+    }
+
+    // Instructions
+    let instr = "↑/↓: navigate  Enter: apply  Esc: close";
+    let y_instr = inner.y + inner.height.saturating_sub(1);
+    let w = instr.chars().count() as u16;
+    let x_instr = inner.x + inner.width.saturating_sub(w) / 2;
+    let mut xx = x_instr;
+    for ch in instr.chars() {
+        if xx >= inner.x + inner.width { break; }
+        let cell = buf.get_mut(xx, y_instr);
+        cell.set_char(ch);
+        cell.set_style(Style::default().fg(Color::LightCyan).bg(Color::Black));
+        xx = xx.saturating_add(1);
+    }
 }

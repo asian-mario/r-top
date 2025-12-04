@@ -4,8 +4,8 @@ use crate::constants::HISTORY_LEN;
 use crate::utils::CircularBuffer;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::os::unix::process;
 use crate::app_state::*;
+use std::fs;
 
 #[inline]
 pub fn bytes_to_gib(b: u64) -> f64 {
@@ -479,4 +479,117 @@ pub fn sort_and_filter_processes_cached<'a>(
     let sorted_processes = sort_processes_cached(system, &app_state.sort_category, &mut app_state.process_cache, &app_state.search_active);
 
     filter_processes_cached(system, &sorted_processes, app_state)
+}
+
+// GPU Information Structure
+#[derive(Clone, Debug)]
+pub struct GpuInfo {
+    pub name: String,
+    pub driver_version: String,
+    pub memory_total: String,
+    pub memory_used: String,
+    pub temperature: String,
+    pub utilization: String,
+}
+
+// Detect and get GPU information
+pub fn get_gpu_info() -> Vec<GpuInfo> {
+    let mut gpus = Vec::new();
+
+    // Try to detect NVIDIA GPUs via nvidia-smi
+    if let Ok(output) = std::process::Command::new("nvidia-smi")
+        .arg("--query-gpu=name,driver_version,memory.total,memory.used,temperature.gpu,utilization.gpu")
+        .arg("--format=csv,noheader,nounits")
+        .output()
+    {
+        if output.status.success() {
+            if let Ok(stdout) = String::from_utf8(output.stdout) {
+                for line in stdout.lines() {
+                    let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
+                    if parts.len() >= 6 {
+                        gpus.push(GpuInfo {
+                            name: parts[0].to_string(),
+                            driver_version: parts[1].to_string(),
+                            memory_total: format!("{} MB", parts[2]),
+                            memory_used: format!("{} MB", parts[3]),
+                            temperature: format!("{}°C", parts[4]),
+                            utilization: format!("{}%", parts[5]),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Try to detect AMD GPUs via rocm-smi or radeontop
+    if gpus.is_empty() {
+        if let Ok(output) = std::process::Command::new("rocm-smi")
+            .arg("--showproductname")
+            .output()
+        {
+            if output.status.success() {
+                if let Ok(stdout) = String::from_utf8(output.stdout) {
+                    for line in stdout.lines() {
+                        if line.contains("GPU") {
+                            gpus.push(GpuInfo {
+                                name: line.trim().to_string(),
+                                driver_version: "N/A".to_string(),
+                                memory_total: "N/A".to_string(),
+                                memory_used: "N/A".to_string(),
+                                temperature: "N/A".to_string(),
+                                utilization: "N/A".to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Try reading from /sys for basic GPU detection (Linux)
+    #[cfg(target_os = "linux")]
+    if gpus.is_empty() {
+        if let Ok(entries) = fs::read_dir("/sys/class/drm") {
+            let mut card_found = false;
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(name) = path.file_name() {
+                    if name.to_string_lossy().starts_with("card") 
+                        && !name.to_string_lossy().contains('-') {
+                        if let Ok(vendor_path) = fs::read_to_string(path.join("device/vendor")) {
+                            card_found = true;
+                            let gpu_name = match vendor_path.trim() {
+                                "0x10de" => "NVIDIA GPU",
+                                "0x1002" => "AMD GPU",
+                                "0x8086" => "Intel GPU",
+                                _ => "Unknown GPU",
+                            };
+                            gpus.push(GpuInfo {
+                                name: gpu_name.to_string(),
+                                driver_version: "N/A".to_string(),
+                                memory_total: "N/A".to_string(),
+                                memory_used: "N/A".to_string(),
+                                temperature: "N/A".to_string(),
+                                utilization: "N/A".to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback: No GPU detected
+    if gpus.is_empty() {
+        gpus.push(GpuInfo {
+            name: "No GPU detected".to_string(),
+            driver_version: "N/A".to_string(),
+            memory_total: "N/A".to_string(),
+            memory_used: "N/A".to_string(),
+            temperature: "N/A".to_string(),
+            utilization: "N/A".to_string(),
+        });
+    }
+
+    gpus
 }

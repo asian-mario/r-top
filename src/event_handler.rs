@@ -26,6 +26,10 @@ pub fn handle_key_event(
     }
 
     if let KeyCode::Char('z') = key.code {
+        // Don't allow toggling pause when theme panel is open
+        if app_state.theme_panel_visible {
+            return Ok(false);
+        }
         app_state.effects.add_effect(
             fx::fade_from(Color::Black, Color::White, 100).with_area(app_state.terminal_area)
         );
@@ -37,7 +41,7 @@ pub fn handle_key_event(
     }
 
     // Handle pause menu navigation
-    if app_state.pause_overlay {
+    if app_state.pause_overlay && !app_state.theme_panel_visible {
         match key.code {
             KeyCode::Up => {
                 app_state.pause_menu_up();
@@ -51,10 +55,8 @@ pub fn handle_key_event(
                 // Handle menu selection
                 match app_state.pause_menu_selected {
                     0 => {
-                        // THEME
-                        app_state.switch_theme();
-                        app_state.toggle_pause_overlay();
-                        app_state.reset_pause_menu();
+                        // THEME: open theme panel
+                        app_state.open_theme_panel();
                     }
                     1 => {
                         // R-TOP SETTINGS (placeholder for now)
@@ -70,6 +72,33 @@ pub fn handle_key_event(
                 return Ok(false);
             }
             _ => return Ok(false), // Ignore other keys in pause menu
+        }
+    }
+
+    // Theme panel input when visible
+    if app_state.theme_panel_visible {
+        match key.code {
+            KeyCode::Up => {
+                app_state.theme_panel_up();
+                return Ok(false);
+            }
+            KeyCode::Down => {
+                app_state.theme_panel_down();
+                return Ok(false);
+            }
+            KeyCode::Enter => {
+                // Apply selected theme
+                let themes = app_state.theme_manager.list_theme_types();
+                let idx = app_state.theme_selected_index.min(themes.len() - 1);
+                app_state.theme_manager.set_theme(themes[idx]);
+                app_state.close_theme_panel();
+                return Ok(false);
+            }
+            KeyCode::Esc => {
+                app_state.close_theme_panel();
+                return Ok(false);
+            }
+            _ => return Ok(false),
         }
     }
 
@@ -208,6 +237,13 @@ pub fn handle_key_event(
             add_sweep_effect(&mut app_state.effects, app_state.disk_area);
             // We'll need to pass the disk count from main
             app_state.next_disk(usize::MAX); // Temporary - should be actual disk count
+        }
+
+        KeyCode::Char('g') => {
+            app_state.previous_gpu();
+        }
+        KeyCode::Char('G') => {
+            app_state.next_gpu(app_state.gpu_info_cache.len());
         }
         
         KeyCode::Char('k') => {

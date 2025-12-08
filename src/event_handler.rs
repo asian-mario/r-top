@@ -193,6 +193,11 @@ pub fn handle_key_event(
             add_sweep_effect(&mut app_state.effects, app_state.net_area);
             app_state.switch_to_ethernet();
         }
+
+        KeyCode::Char('v') => {
+            add_sweep_effect(&mut app_state.effects, app_state.cpu_usage_area);
+            app_state.toggle_gpu_usage_view();
+        }
         
         KeyCode::Enter => {
             if app_state.show_info && app_state.show_tree_view {

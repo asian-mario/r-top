@@ -73,6 +73,7 @@ pub struct AppState {
     pub net_area: Rect,
     pub disk_area: Rect,
     pub terminal_area: Rect,
+    pub cpu_usage_area: Rect,
 
     // Theme management
     pub theme_manager: ThemeManager,
@@ -97,6 +98,9 @@ pub struct AppState {
     // GPU cache
     pub gpu_info_cache: Vec<crate::system_info::GpuInfo>,
     pub gpu_cache_last_update: Instant,
+
+    // GPU view toggle
+    pub gpu_usage_view: bool,
 }
 
 
@@ -139,6 +143,7 @@ impl AppState {
             net_area: Rect::default(),
             disk_area: Rect::default(),
             terminal_area: Rect::default(),
+            cpu_usage_area: Rect::default(),
 
             // Themes
             theme_manager: ThemeManager::new(),
@@ -163,6 +168,9 @@ impl AppState {
             // GPU cache (will be populated on first render)
             gpu_info_cache: Vec::new(),
             gpu_cache_last_update: Instant::now(),
+
+            // GPU view toggle
+            gpu_usage_view: false,
         }
     }
     // methods to for tree shit
@@ -281,6 +289,10 @@ impl AppState {
         if self.current_gpu_index + 1 < max_gpus {
             self.current_gpu_index += 1;
         }
+    }
+
+    pub fn toggle_gpu_usage_view(&mut self) {
+        self.gpu_usage_view = !self.gpu_usage_view;
     }
 
     pub fn update_gpu_cache_if_needed(&mut self) {

@@ -280,9 +280,14 @@ fn render_cpu_section(
         .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
         .split(area);
 
-    // Draw CPU cores
+    // Track the CPU/GPU usage panel area for effects
+    app_state.cpu_usage_area = cpu_chunks[0];
+
+    let block_title = if app_state.gpu_usage_view { " GPU Usage (v: CPU) " } else { " CPU Usage (v: GPU) " };
+
+    // Draw CPU cores or GPU usage based on toggle
     let bordered_block = Block::default()
-        .title(" CPU Usage ")
+        .title(block_title)
         .title_style(Style::default().fg(theme.primary_text))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.primary_border));
@@ -290,54 +295,115 @@ fn render_cpu_section(
     frame.render_widget(&bordered_block, cpu_chunks[0]);
     let inner_area = bordered_block.inner(cpu_chunks[0]);
 
-    let core_count = system.cpus().len();
-    let max_rows = 8;
-    let columns = (core_count + max_rows - 1) / max_rows;
+    if !app_state.gpu_usage_view {
+        let core_count = system.cpus().len();
+        let max_rows = 8;
+        let columns = (core_count + max_rows - 1) / max_rows;
 
-    let core_columns = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(vec![Constraint::Percentage(100 / columns as u16); columns])
-        .split(inner_area);
+        let core_columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Percentage(100 / columns as u16); columns])
+            .split(inner_area);
 
-    for (col, chunk) in core_columns.iter().enumerate() {
-        let start = col * max_rows;
-        let end = ((col + 1) * max_rows).min(core_count);
+        for (col, chunk) in core_columns.iter().enumerate() {
+            let start = col * max_rows;
+            let end = ((col + 1) * max_rows).min(core_count);
 
-        let rows: Vec<Rect> = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(vec![Constraint::Length(1); end - start])
-            .split(*chunk)
-            .to_vec();
+            let rows: Vec<Rect> = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(vec![Constraint::Length(1); end - start])
+                .split(*chunk)
+                .to_vec();
 
-        for (i, area) in (start..end).zip(rows.into_iter()) {
-            let cpu = &system.cpus()[i];
-            let usage = cpu.cpu_usage();
-            let ratio = (usage / 100.0).max(0.01);
+            for (i, area) in (start..end).zip(rows.into_iter()) {
+                let cpu = &system.cpus()[i];
+                let usage = cpu.cpu_usage();
+                let ratio = (usage / 100.0).max(0.01);
 
-            let color = if usage > 80.0 {
-                theme.cpu_critical
-            } else if usage > 50.0 {
-                theme.cpu_high
-            } else if usage > 20.0 {
-                theme.cpu_medium
-            } else {
-                theme.cpu_low
-            };
+                let color = if usage > 80.0 {
+                    theme.cpu_critical
+                } else if usage > 50.0 {
+                    theme.cpu_high
+                } else if usage > 20.0 {
+                    theme.cpu_medium
+                } else {
+                    theme.cpu_low
+                };
 
-            let split = Layout::default()
+                let split = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Length(12), Constraint::Min(10)])
+                    .split(area);
+
+                let label = Paragraph::new(format!("Core {:>2}", i))
+                    .style(Style::default().fg(theme.primary_text));
+                frame.render_widget(label, split[0]);
+
+                let gauge = Gauge::default()
+                    .gauge_style(Style::default().fg(color))
+                    .ratio(ratio as f64)
+                    .label(format!("{:>5.1}%", usage));
+                frame.render_widget(gauge, split[1]);
+            }
+        }
+    } else {
+        let gpus = &app_state.gpu_info_cache;
+        let gpu_count = gpus.len();
+
+        if gpu_count == 0 {
+            let placeholder = Paragraph::new("No GPU data available")
+                .style(Style::default().fg(theme.secondary_text));
+            frame.render_widget(placeholder, inner_area);
+        } else {
+            let max_rows = 8;
+            let columns = (gpu_count + max_rows - 1) / max_rows;
+
+            let gpu_columns = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints([Constraint::Length(10), Constraint::Min(10)])
-                .split(area);
+                .constraints(vec![Constraint::Percentage(100 / columns as u16); columns])
+                .split(inner_area);
 
-            let label = Paragraph::new(format!("Core {:>2}", i))
-                .style(Style::default().fg(theme.primary_text));
-            frame.render_widget(label, split[0]);
+            for (col, chunk) in gpu_columns.iter().enumerate() {
+                let start = col * max_rows;
+                let end = ((col + 1) * max_rows).min(gpu_count);
 
-            let gauge = Gauge::default()
-                .gauge_style(Style::default().fg(color))
-                .ratio(ratio as f64)
-                .label(format!("{:>5.1}%", usage));
-            frame.render_widget(gauge, split[1]);
+                let rows: Vec<Rect> = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints(vec![Constraint::Length(1); end - start])
+                    .split(*chunk)
+                    .to_vec();
+
+                for (idx, area) in (start..end).zip(rows.into_iter()) {
+                    let gpu = &gpus[idx];
+                    let usage_val = gpu.utilization.trim_end_matches('%').parse::<f64>().unwrap_or(0.0);
+                    let ratio = (usage_val / 100.0).clamp(0.0, 1.0);
+
+                    let color = if usage_val > 80.0 {
+                        theme.cpu_critical
+                    } else if usage_val > 50.0 {
+                        theme.cpu_high
+                    } else if usage_val > 20.0 {
+                        theme.cpu_medium
+                    } else {
+                        theme.cpu_low
+                    };
+
+                    let split = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Length(20), Constraint::Min(10)])
+                        .split(area);
+
+                    let label = Paragraph::new(format!("GPU {}", idx))
+                        .style(Style::default().fg(theme.primary_text));
+                    frame.render_widget(label, split[0]);
+
+                    let gauge = Gauge::default()
+                        .gauge_style(Style::default().fg(color))
+                        .ratio(ratio)
+                        .label(format!("{:>5.1}%", usage_val));
+                    frame.render_widget(gauge, split[1]);
+                }
+            }
         }
     }
 

@@ -1,3 +1,7 @@
+# r-top-lite edition
+**r-top-lite** is a lighter with less features but better memory and CPU usage than the main branch. Any changes to the b-daemon will be implemented here as its developed as a separate entity. This version does not have any config settings and runs default settings.
+
+---
 # r-top
 
 **r-top** is a terminal-based, Rust-powered system resource viewer for UNIX-like systems. Inspired by tools like `bashtop` and `htop`, `b-top` provides a visually impressive process monitoring and management tool with shader-like implementations by using TachyonFX.

@@ -1,4 +1,6 @@
 use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use serde::{Serialize, Deserialize};
 use ratatui::layout::Rect;
 use ratatui::widgets::Row;
 use tachyonfx::EffectManager;
@@ -32,6 +34,40 @@ pub struct TreeItem {
 pub enum SearchType {
     Name,
     Pid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UserSettings {
+    pub refresh_interval_ms: u64,
+    pub default_interface: String,
+    pub default_usage_view: String, // "cpu" or "gpu"
+    pub default_theme: String,
+    pub show_info_on_start: bool,
+}
+
+impl Default for UserSettings {
+    fn default() -> Self {
+        Self {
+            refresh_interval_ms: 2000,
+            default_interface: "eth0".to_string(),
+            default_usage_view: "cpu".to_string(),
+            default_theme: "DarkPurple".to_string(),
+            show_info_on_start: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DaemonSettings {
+    pub enabled_service: String, // Name of service to auto-run via daemon, empty string means none
+}
+
+impl Default for DaemonSettings {
+    fn default() -> Self {
+        Self {
+            enabled_service: String::new(),
+        }
+    }
 }
 
 pub struct AppState {
@@ -94,6 +130,17 @@ pub struct AppState {
     // Theme panel
     pub theme_panel_visible: bool,
     pub theme_selected_index: usize,
+
+    // Settings panel
+    pub settings_panel_visible: bool,
+    pub settings_selected_index: usize,
+    pub user_settings: UserSettings,
+
+    // Daemon settings panel
+    pub daemon_panel_visible: bool,
+    pub daemon_selected_index: usize,
+    pub daemon_settings: DaemonSettings,
+    pub available_services: Vec<String>,
 
     // GPU cache
     pub gpu_info_cache: Vec<crate::system_info::GpuInfo>,
@@ -164,6 +211,17 @@ impl AppState {
             // Theme panel
             theme_panel_visible: false,
             theme_selected_index: 0,
+
+            // Settings panel
+            settings_panel_visible: false,
+            settings_selected_index: 0,
+            user_settings: UserSettings::default(),
+
+            // Daemon settings panel
+            daemon_panel_visible: false,
+            daemon_selected_index: 0,
+            daemon_settings: DaemonSettings::default(),
+            available_services: Vec::new(),
 
             // GPU cache (will be populated on first render)
             gpu_info_cache: Vec::new(),
@@ -301,6 +359,85 @@ impl AppState {
             self.gpu_info_cache = crate::system_info::get_gpu_info();
             self.gpu_cache_last_update = Instant::now();
         }
+    }
+
+    // Settings panel control
+    pub fn open_settings_panel(&mut self) {
+        self.settings_panel_visible = true;
+        self.settings_selected_index = 0;
+    }
+
+    pub fn close_settings_panel(&mut self) {
+        self.settings_panel_visible = false;
+    }
+
+    pub fn settings_up(&mut self) {
+        if self.settings_selected_index > 0 {
+            self.settings_selected_index -= 1;
+        }
+    }
+
+    pub fn settings_down(&mut self, max: usize) {
+        if self.settings_selected_index + 1 < max {
+            self.settings_selected_index += 1;
+        }
+    }
+
+    pub fn apply_user_settings(&mut self) {
+        // Refresh interval
+        let ms = self.user_settings.refresh_interval_ms.clamp(100, 10_000);
+        self.refresh_interval = Duration::from_millis(ms);
+
+        // Interface (only eth0/lo recognized for now)
+        self.current_interface = if self.user_settings.default_interface.to_lowercase() == "lo" {
+            "lo"
+        } else {
+            "eth0"
+        };
+
+        // Usage view
+        self.gpu_usage_view = self.user_settings.default_usage_view.to_lowercase() == "gpu";
+
+        // Theme
+        if let Some(t) = self.theme_manager.list_theme_types().iter().find(|t| t.as_str() == self.user_settings.default_theme) {
+            self.theme_manager.set_theme(*t);
+        }
+
+        // Show info toggle
+        self.show_info = self.user_settings.show_info_on_start;
+    }
+
+    pub fn settings_path() -> Option<PathBuf> {
+        dirs::config_dir().map(|p| p.join("r-top").join("config.toml"))
+    }
+
+    pub fn save_user_settings(&self) -> Result<(), String> {
+        let path = Self::settings_path().ok_or("Unable to resolve config directory")?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create config dir: {}", e))?;
+        }
+        let toml = toml::to_string_pretty(&self.user_settings).map_err(|e| format!("Serialize settings failed: {}", e))?;
+        std::fs::write(&path, toml).map_err(|e| format!("Write settings failed: {}", e))?;
+        Ok(())
+    }
+
+    pub fn load_user_settings(&mut self) -> Result<(), String> {
+        let path = Self::settings_path().ok_or("Unable to resolve config directory")?;
+        let settings = if path.exists() {
+            let content = std::fs::read_to_string(&path).map_err(|e| format!("Read settings failed: {}", e))?;
+            toml::from_str::<UserSettings>(&content).unwrap_or_default()
+        } else {
+            let defaults = UserSettings::default();
+            let toml = toml::to_string_pretty(&defaults).map_err(|e| format!("Serialize defaults failed: {}", e))?;
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create config dir: {}", e))?;
+            }
+            std::fs::write(&path, toml).map_err(|e| format!("Write default settings failed: {}", e))?;
+            defaults
+        };
+        self.user_settings = settings;
+        self.apply_user_settings();
+        Ok(())
     }
 
     pub fn increase_refresh_interval(&mut self) {
@@ -459,12 +596,105 @@ impl AppState {
     }
 
     pub fn pause_menu_down(&mut self) {
-        if self.pause_menu_selected < 2 {
+        if self.pause_menu_selected < 3 {
             self.pause_menu_selected += 1;
         }
     }
 
     pub fn reset_pause_menu(&mut self) {
         self.pause_menu_selected = 0;
+    }
+
+    // Daemon settings panel controls
+    pub fn open_daemon_panel(&mut self) {
+        self.daemon_panel_visible = true;
+        self.daemon_selected_index = 0;
+        // Load available services from config
+        let _ = self.load_available_services();
+    }
+
+    pub fn close_daemon_panel(&mut self) {
+        self.daemon_panel_visible = false;
+    }
+
+    pub fn daemon_panel_up(&mut self) {
+        if self.daemon_selected_index > 0 {
+            self.daemon_selected_index -= 1;
+        }
+    }
+
+    pub fn daemon_panel_down(&mut self, max: usize) {
+        if self.daemon_selected_index + 1 < max {
+            self.daemon_selected_index += 1;
+        }
+    }
+
+    pub fn load_available_services(&mut self) -> Result<(), String> {
+        // Load services from daemon config file
+        let daemon_config_path = dirs::config_dir()
+            .ok_or("Unable to resolve config directory")?
+            .join("r-top")
+            .join("services.toml");
+
+        self.available_services.clear();
+
+        if daemon_config_path.exists() {
+            let content = std::fs::read_to_string(&daemon_config_path)
+                .map_err(|e| format!("Read daemon config failed: {}", e))?;
+            
+            // Parse TOML and extract service names
+            if let Ok(toml_val) = content.parse::<toml::Value>() {
+                if let Some(services) = toml_val.get("services").and_then(|v| v.as_array()) {
+                    for service in services {
+                        if let Some(name) = service.get("name").and_then(|n| n.as_str()) {
+                            self.available_services.push(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add "None" as first option
+        let mut services = vec!["None".to_string()];
+        services.extend(self.available_services.clone());
+        self.available_services = services;
+
+        Ok(())
+    }
+
+    pub fn daemon_settings_path() -> Option<PathBuf> {
+        dirs::config_dir().map(|p| p.join("r-top").join("daemon_settings.toml"))
+    }
+
+    pub fn save_daemon_settings(&self) -> Result<(), String> {
+        let path = Self::daemon_settings_path().ok_or("Unable to resolve config directory")?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create config dir: {}", e))?;
+        }
+        let toml = toml::to_string_pretty(&self.daemon_settings).map_err(|e| format!("Serialize daemon settings failed: {}", e))?;
+        std::fs::write(&path, toml).map_err(|e| format!("Write daemon settings failed: {}", e))?;
+        Ok(())
+    }
+
+    pub fn load_daemon_settings(&mut self) -> Result<(), String> {
+        let path = Self::daemon_settings_path().ok_or("Unable to resolve config directory")?;
+        let settings = if path.exists() {
+            let content = std::fs::read_to_string(&path).map_err(|e| format!("Read daemon settings failed: {}", e))?;
+            toml::from_str::<DaemonSettings>(&content).unwrap_or_default()
+        } else {
+            let defaults = DaemonSettings::default();
+            let toml = toml::to_string_pretty(&defaults).map_err(|e| format!("Serialize defaults failed: {}", e))?;
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create config dir: {}", e))?;
+            }
+            std::fs::write(&path, toml).map_err(|e| format!("Write default settings failed: {}", e))?;
+            defaults
+        };
+        self.daemon_settings = settings;
+        Ok(())
+    }
+
+    pub fn reset_daemon_settings(&mut self) {
+        self.daemon_settings = DaemonSettings::default();
     }
 }

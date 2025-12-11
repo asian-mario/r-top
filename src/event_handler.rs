@@ -41,7 +41,7 @@ pub fn handle_key_event(
     }
 
     // Handle pause menu navigation
-    if app_state.pause_overlay && !app_state.theme_panel_visible {
+    if app_state.pause_overlay && !app_state.theme_panel_visible && !app_state.settings_panel_visible && !app_state.daemon_panel_visible {
         match key.code {
             KeyCode::Up => {
                 app_state.pause_menu_up();
@@ -59,11 +59,14 @@ pub fn handle_key_event(
                         app_state.open_theme_panel();
                     }
                     1 => {
-                        // R-TOP SETTINGS (placeholder for now)
-                        app_state.toggle_pause_overlay();
-                        app_state.reset_pause_menu();
+                        // R-TOP SETTINGS
+                        app_state.open_settings_panel();
                     }
                     2 => {
+                        // DAEMON SETTINGS
+                        app_state.open_daemon_panel();
+                    }
+                    3 => {
                         // EXIT
                         return Ok(true);
                     }
@@ -96,6 +99,165 @@ pub fn handle_key_event(
             }
             KeyCode::Esc => {
                 app_state.close_theme_panel();
+                return Ok(false);
+            }
+            _ => return Ok(false),
+        }
+    }
+
+    // Settings panel input when visible
+    if app_state.settings_panel_visible {
+        const SETTINGS_LEN: usize = 8;
+        match key.code {
+            KeyCode::Up => {
+                app_state.settings_up();
+                return Ok(false);
+            }
+            KeyCode::Down => {
+                app_state.settings_down(SETTINGS_LEN);
+                return Ok(false);
+            }
+            KeyCode::Left => {
+                match app_state.settings_selected_index {
+                    0 => {
+                        let ms = app_state.user_settings.refresh_interval_ms.saturating_sub(100).clamp(100, 10_000);
+                        app_state.user_settings.refresh_interval_ms = ms;
+                        app_state.apply_user_settings();
+                    }
+                    1 => {
+                        app_state.user_settings.default_interface = if app_state.user_settings.default_interface.to_lowercase() == "lo" { "eth0".to_string() } else { "lo".to_string() };
+                        app_state.apply_user_settings();
+                    }
+                    2 => {
+                        app_state.user_settings.default_usage_view = if app_state.user_settings.default_usage_view.to_lowercase() == "gpu" { "cpu".to_string() } else { "gpu".to_string() };
+                        app_state.apply_user_settings();
+                    }
+                    3 => {
+                        let themes = app_state.theme_manager.list_theme_types();
+                        if let Some(pos) = themes.iter().position(|t| t.as_str() == app_state.user_settings.default_theme) {
+                            let next = if pos == 0 { themes.len() - 1 } else { pos - 1 };
+                            app_state.user_settings.default_theme = themes[next].as_str().to_string();
+                            app_state.apply_user_settings();
+                        }
+                    }
+                    4 => {
+                        app_state.user_settings.show_info_on_start = !app_state.user_settings.show_info_on_start;
+                        app_state.apply_user_settings();
+                    }
+                    _ => {}
+                }
+                return Ok(false);
+            }
+            KeyCode::Right => {
+                match app_state.settings_selected_index {
+                    0 => {
+                        let ms = (app_state.user_settings.refresh_interval_ms + 100).clamp(100, 10_000);
+                        app_state.user_settings.refresh_interval_ms = ms;
+                        app_state.apply_user_settings();
+                    }
+                    1 => {
+                        app_state.user_settings.default_interface = if app_state.user_settings.default_interface.to_lowercase() == "lo" { "eth0".to_string() } else { "lo".to_string() };
+                        app_state.apply_user_settings();
+                    }
+                    2 => {
+                        app_state.user_settings.default_usage_view = if app_state.user_settings.default_usage_view.to_lowercase() == "gpu" { "cpu".to_string() } else { "gpu".to_string() };
+                        app_state.apply_user_settings();
+                    }
+                    3 => {
+                        let themes = app_state.theme_manager.list_theme_types();
+                        if let Some(pos) = themes.iter().position(|t| t.as_str() == app_state.user_settings.default_theme) {
+                            let next = (pos + 1) % themes.len();
+                            app_state.user_settings.default_theme = themes[next].as_str().to_string();
+                            app_state.apply_user_settings();
+                        }
+                    }
+                    4 => {
+                        app_state.user_settings.show_info_on_start = !app_state.user_settings.show_info_on_start;
+                        app_state.apply_user_settings();
+                    }
+                    _ => {}
+                }
+                return Ok(false);
+            }
+            KeyCode::Enter => {
+                match app_state.settings_selected_index {
+                    5 => {
+                        if let Err(e) = app_state.save_user_settings() {
+                            app_state.show_popup(format!("Failed to save settings: {}", e));
+                        }
+                        return Ok(false);
+                    }
+                    6 => {
+                        if let Err(e) = app_state.load_user_settings() {
+                            app_state.show_popup(format!("Failed to load settings: {}", e));
+                        }
+                        return Ok(false);
+                    }
+                    7 => {
+                        app_state.user_settings = crate::app_state::UserSettings::default();
+                        app_state.apply_user_settings();
+                        return Ok(false);
+                    }
+                    _ => return Ok(false),
+                }
+            }
+            KeyCode::Esc => {
+                app_state.close_settings_panel();
+                return Ok(false);
+            }
+            _ => return Ok(false),
+        }
+    }
+
+    // Daemon settings panel input when visible
+    if app_state.daemon_panel_visible {
+        match key.code {
+            KeyCode::Up => {
+                app_state.daemon_panel_up();
+                return Ok(false);
+            }
+            KeyCode::Down => {
+                app_state.daemon_panel_down(app_state.available_services.len() + 2); // +2 for Save/Reset buttons
+                return Ok(false);
+            }
+            KeyCode::Left | KeyCode::Right => {
+                // Cycle through available services
+                if app_state.daemon_selected_index < app_state.available_services.len() {
+                    let len = app_state.available_services.len();
+                    if key.code == KeyCode::Left {
+                        app_state.daemon_selected_index = if app_state.daemon_selected_index > 0 {
+                            app_state.daemon_selected_index - 1
+                        } else {
+                            len - 1
+                        };
+                    } else {
+                        app_state.daemon_selected_index = (app_state.daemon_selected_index + 1) % len;
+                    }
+                    if let Some(service_name) = app_state.available_services.get(app_state.daemon_selected_index) {
+                        app_state.daemon_settings.enabled_service = service_name.clone();
+                    }
+                }
+                return Ok(false);
+            }
+            KeyCode::Enter => {
+                match app_state.daemon_selected_index {
+                    idx if idx == app_state.available_services.len() => {
+                        // Save button
+                        if let Err(e) = app_state.save_daemon_settings() {
+                            app_state.show_popup(format!("Failed to save daemon settings: {}", e));
+                        }
+                        return Ok(false);
+                    }
+                    idx if idx == app_state.available_services.len() + 1 => {
+                        // Reset button
+                        app_state.reset_daemon_settings();
+                        return Ok(false);
+                    }
+                    _ => return Ok(false),
+                }
+            }
+            KeyCode::Esc => {
+                app_state.close_daemon_panel();
                 return Ok(false);
             }
             _ => return Ok(false),

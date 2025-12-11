@@ -184,6 +184,16 @@ fn run_daemon_mode_silent(config_path: Option<PathBuf>, shutdown_signal: Arc<Ato
 fn run_process_monitor() -> io::Result<()> {
     let mut terminal = ratatui::init();
     let mut app_state = AppState::new();
+
+    // Load user settings (ignore errors, keep defaults if missing)
+    if let Err(e) = app_state.load_user_settings() {
+        eprintln!("Failed to load settings: {}", e);
+    }
+
+    // Load daemon settings (ignore errors, keep defaults if missing)
+    if let Err(e) = app_state.load_daemon_settings() {
+        eprintln!("Failed to load daemon settings: {}", e);
+    }
     
     let refresh = RefreshKind::everything();
     let mut system = System::new_with_specifics(refresh);

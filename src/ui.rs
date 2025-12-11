@@ -135,12 +135,22 @@ $$ |               \$$$$  |\$$$$$$  |$$$$$$$  |
     if app_state.theme_panel_visible {
         render_theme_panel(frame, app_state, area);
     }
-}
 
+    // Render settings panel over everything when visible
+    if app_state.settings_panel_visible {
+        render_settings_panel(frame, app_state, area);
+    }
+
+    // Render daemon settings panel over everything when visible
+    if app_state.daemon_panel_visible {
+        render_daemon_settings_panel(frame, app_state, area);
+    }
+}
 fn render_pause_menu(app_state: &AppState, area: Rect, buf: &mut ratatui::buffer::Buffer, after_title_y: u16) {
     let menu_options = [
         "THEME",
         "R-TOP SETTINGS",
+        "DAEMON SETTINGS",
         "EXIT",
     ];
 
@@ -1123,6 +1133,175 @@ fn render_theme_panel(frame: &mut ratatui::Frame, app_state: &AppState, area: Re
 
     // Instructions
     let instr = "↑/↓: navigate  Enter: apply  Esc: close";
+    let y_instr = inner.y + inner.height.saturating_sub(1);
+    let w = instr.chars().count() as u16;
+    let x_instr = inner.x + inner.width.saturating_sub(w) / 2;
+    let mut xx = x_instr;
+    for ch in instr.chars() {
+        if xx >= inner.x + inner.width { break; }
+        let cell = buf.get_mut(xx, y_instr);
+        cell.set_char(ch);
+        cell.set_style(Style::default().fg(Color::LightCyan).bg(Color::Black));
+        xx = xx.saturating_add(1);
+    }
+}
+
+fn render_settings_panel(frame: &mut ratatui::Frame, app_state: &AppState, area: Rect) {
+    let panel_width = area.width.saturating_sub(12).min(70);
+    let panel_height = 14;
+    let x = area.x + (area.width.saturating_sub(panel_width)) / 2;
+    let y = area.y + (area.height.saturating_sub(panel_height)) / 2;
+    let panel_area = Rect::new(x, y, panel_width, panel_height);
+
+    let block = Block::default()
+        .title(" R-TOP Settings ")
+        .title_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow))
+        .style(Style::default().bg(Color::Black));
+
+    frame.render_widget(&block, panel_area);
+    let inner = block.inner(panel_area);
+
+    let buf = frame.buffer_mut();
+    for yy in inner.y..inner.y + inner.height {
+        for xx in inner.x..inner.x + inner.width {
+            let cell = buf.get_mut(xx, yy);
+            cell.set_char(' ');
+            cell.set_style(Style::default().fg(Color::Black).bg(Color::Black));
+        }
+    }
+
+    let us = &app_state.user_settings;
+    let options = vec![
+        format!("Refresh interval: {} ms", us.refresh_interval_ms),
+        format!("Default interface: {}", us.default_interface),
+        format!("Default usage view: {}", us.default_usage_view.to_uppercase()),
+        format!("Default theme: {}", us.default_theme),
+        format!("Show info on start: {}", if us.show_info_on_start { "On" } else { "Off" }),
+        "Save settings".to_string(),
+        "Load settings [wip]".to_string(),
+        "Reset defaults".to_string(),
+    ];
+
+    for (i, line) in options.iter().enumerate() {
+        let y = inner.y + i as u16;
+        if y >= inner.y + inner.height { break; }
+        let line_width = line.chars().count() as u16;
+        let x_start = if inner.width > line_width { inner.x + (inner.width - line_width) / 2 } else { inner.x };
+        let is_sel = i == app_state.settings_selected_index;
+        let style = if is_sel {
+            Style::default().fg(Color::Yellow).bg(Color::Black).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White).bg(Color::Black)
+        };
+        let mut xx = x_start;
+        for ch in line.chars() {
+            if xx >= inner.x + inner.width { break; }
+            let cell = buf.get_mut(xx, y);
+            cell.set_char(ch);
+            cell.set_style(style);
+            xx = xx.saturating_add(1);
+        }
+    }
+
+    let instr = "↑/↓ move  ←/→ adjust  Enter: save/load/reset  Esc: close";
+    let y_instr = inner.y + inner.height.saturating_sub(1);
+    let w = instr.chars().count() as u16;
+    let x_instr = inner.x + inner.width.saturating_sub(w) / 2;
+    let mut xx = x_instr;
+    for ch in instr.chars() {
+        if xx >= inner.x + inner.width { break; }
+        let cell = buf.get_mut(xx, y_instr);
+        cell.set_char(ch);
+        cell.set_style(Style::default().fg(Color::LightCyan).bg(Color::Black));
+        xx = xx.saturating_add(1);
+    }
+}
+
+fn render_daemon_settings_panel(frame: &mut ratatui::Frame, app_state: &AppState, area: Rect) {
+    let panel_width = area.width.saturating_sub(12).min(70);
+    let panel_height = (app_state.available_services.len() as u16) + 8;
+    let x = area.x + (area.width.saturating_sub(panel_width)) / 2;
+    let y = area.y + (area.height.saturating_sub(panel_height)) / 2;
+    let panel_area = Rect::new(x, y, panel_width, panel_height);
+
+    let block = Block::default()
+        .title(" Daemon Settings ")
+        .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan))
+        .style(Style::default().bg(Color::Black));
+
+    frame.render_widget(&block, panel_area);
+    let inner = block.inner(panel_area);
+
+    let buf = frame.buffer_mut();
+    for yy in inner.y..inner.y + inner.height {
+        for xx in inner.x..inner.x + inner.width {
+            let cell = buf.get_mut(xx, yy);
+            cell.set_char(' ');
+            cell.set_style(Style::default().fg(Color::Black).bg(Color::Black));
+        }
+    }
+
+    // Build options list: available services + Save + Reset
+    let mut options = vec![
+        format!("Select service to auto-run:"),
+    ];
+    
+    for service in &app_state.available_services {
+        let selected_marker = if service == &app_state.daemon_settings.enabled_service {
+            "● ".to_string()
+        } else {
+            "○ ".to_string()
+        };
+        options.push(format!("  {}{}", selected_marker, service));
+    }
+    
+    options.push("".to_string()); // Blank line
+    options.push("Save settings".to_string());
+    options.push("Reset defaults".to_string());
+
+    for (i, line) in options.iter().enumerate() {
+        let y = inner.y + i as u16;
+        if y >= inner.y + inner.height { break; }
+        
+        let line_width = line.chars().count() as u16;
+        let x_start = if inner.width > line_width { inner.x + (inner.width - line_width) / 2 } else { inner.x };
+        
+        // Determine if this line is selected
+        let is_sel = if i == 0 {
+            false // Header not selectable
+        } else if i >= 1 && i <= app_state.available_services.len() {
+            app_state.daemon_selected_index == i - 1
+        } else if i == app_state.available_services.len() + 2 {
+            app_state.daemon_selected_index == app_state.available_services.len()
+        } else if i == app_state.available_services.len() + 3 {
+            app_state.daemon_selected_index == app_state.available_services.len() + 1
+        } else {
+            false
+        };
+        
+        let style = if i == 0 {
+            Style::default().fg(Color::Cyan).bg(Color::Black)
+        } else if is_sel {
+            Style::default().fg(Color::Yellow).bg(Color::Black).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White).bg(Color::Black)
+        };
+        
+        let mut xx = x_start;
+        for ch in line.chars() {
+            if xx >= inner.x + inner.width { break; }
+            let cell = buf.get_mut(xx, y);
+            cell.set_char(ch);
+            cell.set_style(style);
+            xx = xx.saturating_add(1);
+        }
+    }
+
+    let instr = "↑/↓ move  ←/→ select  Enter: save/reset  Esc: close";
     let y_instr = inner.y + inner.height.saturating_sub(1);
     let w = instr.chars().count() as u16;
     let x_instr = inner.x + inner.width.saturating_sub(w) / 2;
